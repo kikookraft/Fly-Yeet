@@ -1,37 +1,47 @@
 import pygame
-import time
 import math
+
 pygame.init()
 MOVE_POWER = 1
 FRICTION = .9
 CELLS = 25
 
+
 def bezier(x: float) -> float:
     """calculate bezier curve for smooth moves or transitions"""
     return 3 * x**2 - 2 * x**3
 
+
 class Window:
-    def __init__(self, width: int = 1500, height: int = 900, fps: int = 60) -> None:
+    def __init__(
+            self,
+            width: int = 1500,
+            height: int = 900,
+            fps: int = 60) -> None:
         self.width: int = width
         self.height: int = height
         self.fps: int = fps
-        self.screen: pygame.Surface = pygame.display.set_mode((self.width, self.height), pygame.NOFRAME)
+        self.screen: pygame.Surface = pygame.display.set_mode(
+            (self.width, self.height), pygame.NOFRAME)
         self.clock: pygame.time.Clock = pygame.time.Clock()
-        pygame.display.set_caption("feur")
-        self.background_tile: pygame.Surface = pygame.image.load("assets/tile.png").convert()
-    
-    def update(self):
+        pygame.display.set_caption("Fly YEEET")
+        self.background_tile: pygame.Surface = pygame.image.load(
+            "assets/tile.png").convert()
+
+    def update(self) -> None:
         pygame.display.flip()
         self.screen.fill((20, 30, 60))
         for x in range(0, self.width, self.background_tile.get_width()):
             for y in range(0, self.height, self.background_tile.get_height()):
                 self.screen.blit(self.background_tile, (x, y))
         self.clock.tick(self.fps)
-        
+
     def change_res(self, width: int, height: int) -> None:
         self.width: int = width
         self.height: int = height
-        self.screen: pygame.Surface = pygame.display.set_mode((self.width, self.height), pygame.NOFRAME)
+        self.screen: pygame.Surface = pygame.display.set_mode(
+            (self.width, self.height), pygame.NOFRAME)
+
 
 class ImageObject:
     def __init__(self, image_path: str, x: float, y: float, scale: float = 1) -> None:

@@ -1,19 +1,19 @@
 .PHONY: install run debug clean lint lint-strict
 
+run: install
+	uv run python gui.py
+
 install:
 	uv venv
 	uv pip install pygame flake8 mypy
-
-run:
-	uv run python gui.py
 
 debug:
 	uv run python -m pdb gui.py
 
 clean:
-	if exist __pycache__ rmdir /s /q __pycache__
-	if exist .mypy_cache rmdir /s /q .mypy_cache
-	if exist .venv rmdir /s /q .venv
+	rm -rf __pycache__
+	rm -rf .mypy_cache
+	rm -rf .venv
 
 lint:
 	uv run flake8 .
