@@ -4,7 +4,7 @@ run: install
 	uv run python gui.py
 
 install:
-	uv venv
+	uv venv --clear
 	uv pip install pygame flake8 mypy
 
 debug:
