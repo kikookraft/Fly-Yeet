@@ -29,11 +29,15 @@ class Window:
         self.background_tile: pygame.Surface = pygame.image.load(
             "assets/tile.png").convert()
 
-    def update(self) -> None:
-        pygame.display.flip()
+        # Pre-render the background to avoid painting hundreds of tiles every frame
+        self.background: pygame.Surface = pygame.Surface((self.width, self.height))
         for x in range(0, self.width, self.background_tile.get_width()):
             for y in range(0, self.height, self.background_tile.get_height()):
-                self.screen.blit(self.background_tile, (x, y))
+                self.background.blit(self.background_tile, (x, y))
+
+    def update(self) -> None:
+        pygame.display.flip()
+        self.screen.blit(self.background, (0, 0))
         self.clock.tick(self.fps)
         self.current_fps = math.floor(self.clock.get_fps())
 
@@ -60,8 +64,10 @@ class Text:
         screen.blit(self.text_surface, (self.x, self.y))
 
     def set_text(self, text: str) -> None:
-        self.text = text
-        self.text_surface = self.font.render(self.text, True, (255, 255, 255))
+        if text != self.text:
+            self.text = text
+            self.text_surface = self.font.render(
+                self.text, True, (255, 255, 255))
 
     def set_size(self, size: int) -> None:
         self.size = size
@@ -129,9 +135,15 @@ class Rect:
         self.move_power: float = 1.5
         self.radius: int = radius
         self.debug: bool = debug
+        self.rect: pygame.Surface = pygame.Surface(
+            (self.width, self.height), pygame.SRCALPHA)
         if debug:
-            self.debug_img: pygame.Surface = pygame.image.load(
-                "assets/up.png").convert_alpha()
+            self.debug_img: pygame.Surface = pygame.transform.scale(
+                pygame.image.load("assets/up.png").convert_alpha(),
+                (int(self.width), int(self.height)))
+            self.rotated_img: pygame.Surface = self.debug_img
+        else:
+            self.rotated_img: pygame.Surface = self.rect
 
     def center(self) -> tuple[float, float]:
         return (self.x - self.width / 2, self.y - self.height / 2)
@@ -199,15 +211,11 @@ class Rect:
         if self.is_mooving:
             self.handle_moves()
 
-        # create a surface
-        surf: pygame.Surface = pygame.Surface((self.width, self.height),
-                                              pygame.SRCALPHA)
-
         if self.radius:
             # if recthas radius, create a rect inside
             # surface to have rounded corner
-            surf.fill((0, 0, 0, 0))
-            pygame.draw.rect(surf,
+            self.rect.fill((0, 0, 0, 0))
+            pygame.draw.rect(self.rect,
                              (self.color[0],
                               self.color[1],
                               self.color[2],
@@ -216,33 +224,38 @@ class Rect:
                               self.height),
                              border_radius=self.radius)
         else:
-            surf.fill((self.color[0],
-                       self.color[1],
-                       self.color[2],
-                       self.alpha))
+            self.rect.fill((self.color[0],
+                            self.color[1],
+                            self.color[2],
+                            self.alpha))
 
         if self.debug:
-            # blit arrow png to know where the square is aiming at
-            img: pygame.Surface = pygame.transform.scale(
-                self.debug_img, (int(self.width), int(self.height)))
-            surf.blit(img, (0, 0))
-        rotated_img: pygame.Surface = pygame.transform.rotate(
-            surf, (self.z * -57.2958) - 90)  # Convert radians to degrees
-        new_rect: pygame.Rect = rotated_img.get_rect(center=(self.x, self.y))
-        screen.blit(rotated_img, new_rect.topleft)
+            self.rect.blit(self.debug_img, (0, 0))
+        if self.z != self.target_z:
+            self.rotated_img: pygame.Surface = pygame.transform.rotate(
+                self.rect, (self.z * -57.2958) - 90)  # Convert radians to deg
+        new_rect: pygame.Rect = self.rotated_img.get_rect(
+            center=(self.x, self.y))
+        screen.blit(self.rotated_img, new_rect.topleft)
 
 
 class Drone(Rect):
-    def __init__(self, x: float, y: float, debug: bool, cooldown: float) -> None:
+    def __init__(self,
+                 x: float,
+                 y: float,
+                 debug: bool,
+                 cooldown: float) -> None:
         super().__init__(x, y, 50, 50, alpha=255, debug=debug)
-        self.img: pygame.Surface = pygame.image.load(
-            "assets/drone.png").convert_alpha()
-        self.friction = 0.7
-        self.move_power = 0.5
-        self.wander_margin: float = 0.9
+        self.friction = .9
+        self.move_power = 0.1
+        self.wander_margin: float = .8
         self.moove_cooldown: float = cooldown
         self.last_mooved: float = 0
         self.scale: float = 3.0
+        self.img: pygame.Surface = pygame.transform.scale(
+            pygame.image.load("assets/drone.png").convert_alpha(),
+            (int(self.width * self.scale),
+                int(self.height * self.scale)))
 
     def move(self, x: float, y: float) -> None:
         self.last_mooved = pygame.time.get_ticks() / 1000
@@ -252,23 +265,23 @@ class Drone(Rect):
         if not self.is_mooving and (pygame.time.get_ticks() / 1000 -
                                     self.last_mooved > self.moove_cooldown):
             # find a random position and go to it
-            self.move((random.random()
-                      * self.wander_margin * window.width),
-                      (random.random()
-                       * self.wander_margin * window.height))
+            self.move(
+                (random.random() * self.wander_margin * window.width + (
+                    window.width * (1-self.wander_margin)) / 2),
+                (random.random() * self.wander_margin * window.height + (
+                    window.height * (1-self.wander_margin)) / 2))
 
     def draw(self, screen: pygame.Surface) -> None:
         if self.is_mooving:
             self.handle_moves()
 
         # create a surface
-        rotated_img: pygame.Surface = pygame.transform.rotate(
-            self.img, (self.z * -57.2958) - 90)  # Convert radians to degrees
-        scaled_image: pygame.Surface = pygame.transform.scale(
-                rotated_img, (int(self.width * self.scale),
-                              int(self.height * self.scale)))
-        new_rect: pygame.Rect = scaled_image.get_rect(center=(self.x, self.y))
-        screen.blit(scaled_image, new_rect.topleft)
+        if self.z != self.target_z:
+            self.rotated_img: pygame.Surface = pygame.transform.rotate(
+                self.img, (self.z * -57.2958) - 90)  # Convert radians to deg
+        new_rect: pygame.Rect = self.rotated_img.get_rect(
+            center=(self.x, self.y))
+        screen.blit(self.rotated_img, new_rect.topleft)
 
 
 if __name__ == "__main__":
@@ -282,7 +295,7 @@ if __name__ == "__main__":
     objects.append(Rect(30, 30, 0, 0, radius=0, color=(255, 255, 255)))
     drones: list[Drone] = [Drone(
         300, 300, debug=True, cooldown=random.uniform(0.1, 2.0)
-        ) for _ in range(50)]
+        ) for _ in range(100)]
     fps = Text(10, 10, 24, "FPS: 0")
     while running:
         for event in pygame.event.get():
@@ -313,7 +326,8 @@ if __name__ == "__main__":
             obj.draw(window.screen)
         for drone in drones:
             drone.draw(window.screen)
-            drone.wander(window)
+            if pygame.time.get_ticks() / 1000 - drone.last_mooved > drone.moove_cooldown + 2:
+                drone.wander(window)
         objects[1].dummy += 0.05
         objects[1].rotation = math.sin(objects[1].dummy) * 20
         if objects[2].radius > 0:
