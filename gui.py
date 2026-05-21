@@ -17,7 +17,7 @@ class Window:
             self,
             width: int = 3000,
             height: int = 1500,
-            fps: int = 60) -> None:
+            fps: int = 100) -> None:
         self.current_fps: float = 0
         self.width: int = width
         self.height: int = height
@@ -242,6 +242,9 @@ class Rect:
 
 
 class Drone(Rect):
+    _rotation_cache: dict[int, pygame.Surface] = {}
+    _is_cache_initialized: bool = False
+
     def __init__(self,
                  x: float,
                  y: float,
@@ -254,10 +257,16 @@ class Drone(Rect):
         self.moove_cooldown: float = cooldown
         self.last_mooved: float = 0
         self.scale: float = 3.0
-        self.img: pygame.Surface = pygame.transform.scale(
-            pygame.image.load("assets/drone2.png").convert_alpha(),
-            (int(self.width * self.scale),
-                int(self.height * self.scale)))
+
+        # Initialize dictionary of 360 rotated versions ONCE for all drones
+        if not Drone._is_cache_initialized:
+            base_img = pygame.transform.scale(
+                pygame.image.load("assets/drone2.png").convert_alpha(),
+                (int(self.width * self.scale),
+                    int(self.height * self.scale)))
+            for angle in range(360):
+                Drone._rotation_cache[angle] = pygame.transform.rotate(base_img, angle)
+            Drone._is_cache_initialized = True
 
     def move(self, x: float, y: float) -> None:
         self.last_mooved = pygame.time.get_ticks() / 1000
@@ -277,11 +286,9 @@ class Drone(Rect):
         if self.is_mooving:
             self.handle_moves()
 
-        # create a surface
-        # Only recalculate rotation if it's moving
-        if self.z != self.target_z or self.is_mooving:
-            self.rotated_img = pygame.transform.rotate(
-                self.img, (self.z * -57.2958) - 90)  # Convert radians to deg
+        # Fetch the pre-rotated image directly from cache in O(1) time
+        degrees = int((self.z * -57.2958) - 90) % 360
+        self.rotated_img = Drone._rotation_cache[degrees]
 
         new_rect: pygame.Rect = self.rotated_img.get_rect(
             center=(self.x, self.y))
@@ -299,15 +306,16 @@ if __name__ == "__main__":
     objects.append(Rect(30, 30, 0, 0, radius=0, color=(255, 255, 255)))
     drones: list[Drone] = [Drone(
         300, 300, debug=True, cooldown=random.uniform(0.1, 2.0)
-        ) for _ in range(500)]
+        ) for _ in range(10)]
     fps = Text(10, 10, 24, "FPS: 0")
+    drones_count = Text(10, 40, 24, f"Drones: {len(drones)}")
     while running:
         for event in pygame.event.get():
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE or event.key == pygame.K_q:
                     running = False
                 if event.key == pygame.K_p:
-                    stick = not stick
+                    stick: bool = not stick
                 if event.key == pygame.K_d:
                     objects[0].debug = not objects[0].debug
                     if objects[0].debug:
@@ -316,6 +324,10 @@ if __name__ == "__main__":
                     else:
                         objects[0].color = (50, 150, 70)
                         objects[0].alpha = 255
+                if event.key == pygame.K_c:
+                    drones.extend([Drone(
+                        300, 300, debug=True, cooldown=random.uniform(0.1, 2.0)
+                    ) for _ in range(10)])
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left mouse button
                     objects[0].move(event.pos[0], event.pos[1])
@@ -340,6 +352,8 @@ if __name__ == "__main__":
             objects[2].height -= 2
 
         fps.set_text(f"FPS: {window.get_fps()}")
+        drones_count.set_text(f"Drones: {len(drones)}")
         fps.draw(window.screen)
+        drones_count.draw(window.screen)
         window.update()
     pygame.quit()
