@@ -253,7 +253,7 @@ class Drone(Rect):
         self.last_mooved: float = 0
         self.scale: float = 3.0
         self.img: pygame.Surface = pygame.transform.scale(
-            pygame.image.load("assets/drone.png").convert_alpha(),
+            pygame.image.load("assets/drone2.png").convert_alpha(),
             (int(self.width * self.scale),
                 int(self.height * self.scale)))
 
