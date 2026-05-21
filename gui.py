@@ -28,9 +28,8 @@ class Window:
         pygame.display.set_caption("Fly YEEET")
         self.background_tile: pygame.Surface = pygame.image.load(
             "assets/tile.png").convert()
-
-        # Pre-render the background to avoid painting hundreds of tiles every frame
-        self.background: pygame.Surface = pygame.Surface((self.width, self.height))
+        self.background: pygame.Surface = pygame.Surface(
+            (self.width, self.height))
         for x in range(0, self.width, self.background_tile.get_width()):
             for y in range(0, self.height, self.background_tile.get_height()):
                 self.background.blit(self.background_tile, (x, y))
@@ -231,9 +230,12 @@ class Rect:
 
         if self.debug:
             self.rect.blit(self.debug_img, (0, 0))
-        if self.z != self.target_z:
-            self.rotated_img: pygame.Surface = pygame.transform.rotate(
-                self.rect, (self.z * -57.2958) - 90)  # Convert radians to deg
+
+        # We always need to rotate rect since z could be different from 0 
+        # even if z == target_z (it stopped rotating but is facing an angle)
+        self.rotated_img = pygame.transform.rotate(
+            self.rect, (self.z * -57.2958) - 90)  # Convert radians to deg
+
         new_rect: pygame.Rect = self.rotated_img.get_rect(
             center=(self.x, self.y))
         screen.blit(self.rotated_img, new_rect.topleft)
@@ -276,9 +278,11 @@ class Drone(Rect):
             self.handle_moves()
 
         # create a surface
-        if self.z != self.target_z:
-            self.rotated_img: pygame.Surface = pygame.transform.rotate(
+        # Only recalculate rotation if it's moving
+        if self.z != self.target_z or self.is_mooving:
+            self.rotated_img = pygame.transform.rotate(
                 self.img, (self.z * -57.2958) - 90)  # Convert radians to deg
+
         new_rect: pygame.Rect = self.rotated_img.get_rect(
             center=(self.x, self.y))
         screen.blit(self.rotated_img, new_rect.topleft)
@@ -295,7 +299,7 @@ if __name__ == "__main__":
     objects.append(Rect(30, 30, 0, 0, radius=0, color=(255, 255, 255)))
     drones: list[Drone] = [Drone(
         300, 300, debug=True, cooldown=random.uniform(0.1, 2.0)
-        ) for _ in range(100)]
+        ) for _ in range(500)]
     fps = Text(10, 10, 24, "FPS: 0")
     while running:
         for event in pygame.event.get():
