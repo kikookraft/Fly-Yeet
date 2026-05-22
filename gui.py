@@ -23,23 +23,66 @@ class Window:
         self.width: int = width
         self.height: int = height
         self.fps: int = fps
+        self._zoom: float = 1.0
+        self.offset: tuple[float, float] = (0, 0)
         self.screen: pygame.Surface = pygame.display.set_mode(
             (self.width, self.height), pygame.NOFRAME)
         self.clock: pygame.time.Clock = pygame.time.Clock()
         pygame.display.set_caption("Fly YEEET")
         self.background_tile: pygame.Surface = pygame.image.load(
             "assets/tile.png").convert()
-        self.background: pygame.Surface = pygame.Surface(
-            (self.width, self.height))
-        for x in range(0, self.width, self.background_tile.get_width()):
-            for y in range(0, self.height, self.background_tile.get_height()):
-                self.background.blit(self.background_tile, (x, y))
+        self.bg_w = self.background_tile.get_width()
+        self.bg_h = self.background_tile.get_height()
+
+    def draw_background(self) -> None:
+        self.screen.fill((0, 0, 0))
+        # Tile background infinitely based on camera offset and zoom
+        scaled_w = int(self.bg_w * self._zoom)
+        scaled_h = int(self.bg_h * self._zoom)
+        if scaled_w <= 0 or scaled_h <= 0:
+            return
+        
+        scaled_tile = pygame.transform.scale(self.background_tile, (scaled_w, scaled_h))
+        
+        start_x = int(self.offset[0] % scaled_w)
+        if start_x > 0: start_x -= scaled_w
+        start_y = int(self.offset[1] % scaled_h)
+        if start_y > 0: start_y -= scaled_h
+
+        for x in range(start_x, self.width, scaled_w):
+            for y in range(start_y, self.height, scaled_h):
+                self.screen.blit(scaled_tile, (x, y))
 
     def update(self) -> None:
         pygame.display.flip()
-        self.screen.blit(self.background, (0, 0))
         self.clock.tick(self.fps)
         self.current_fps = math.floor(self.clock.get_fps())
+
+    def screen_to_world(self, pos: tuple[float, float]) -> tuple[int, int]:
+        return (int((pos[0] - self.offset[0]) / self._zoom),
+                int((pos[1] - self.offset[1]) / self._zoom))
+
+    def world_to_screen(self, pos: tuple[float, float]) -> tuple[int, int]:
+        return (int(pos[0] * self._zoom + self.offset[0]),
+                int(pos[1] * self._zoom + self.offset[1]))
+
+    def zoom(self, factor: float) -> None:
+        self._zoom *= factor
+        # Limit the unzoom to 3 times the original size
+        if self._zoom < 0.33333333:
+            self._zoom = 0.33333333
+
+    def pan(self, dx: float, dy: float) -> None:
+        self.offset = (self.offset[0] + dx, self.offset[1] + dy)
+
+    def set_offset(self, x: float, y: float) -> None:
+        self.offset = (x, y)
+
+    def get_zoom(self) -> float:
+        return self._zoom
+
+    def get_offset(self) -> tuple[float, float]:
+        return self.offset
 
     def get_fps(self) -> float:
         return self.current_fps
@@ -126,7 +169,7 @@ class Button:
     def center(self) -> tuple[float, float]:
         return (self.x - self.width / 2, self.y - self.height / 2)
 
-    def draw(self, screen: pygame.Surface) -> None:
+    def draw(self, window: 'Window') -> None:
         if not self.enabled:
             return
         # detect hover animation
@@ -155,11 +198,27 @@ class Button:
             else:
                 actual_color: tuple[int, int, int] = self.color
 
-        pygame.draw.rect(screen, actual_color,
-                         (self.center()[0], self.center()[1],
-                          self.width, self.height),
-                         border_radius=self.radius)
-        self.text.draw(screen)
+        cx, cy = self.center()
+        scx, scy = window.world_to_screen((cx, cy))
+        sw = int(self.width * window.get_zoom())
+        sh = int(self.height * window.get_zoom())
+        
+        pygame.draw.rect(window.screen, actual_color,
+                         (scx, scy, sw, sh),
+                         border_radius=int(self.radius * window.get_zoom()))
+        
+        # simple scale for text position
+        stx, sty = window.world_to_screen((self.text.x, self.text.y))
+        
+        # update font size based on zoom temporarily
+        old_size = self.text.size
+        self.text.set_size(int(old_size * window.get_zoom()))
+        self.text.x, self.text.y = stx, sty
+        self.text.draw(window.screen)
+        
+        # restore
+        self.text.set_size(old_size)
+        self.text.x, self.text.y = cx + self.width / 2 - self.text.text_surface.get_width() / 2, cy + self.height / 2 - self.text.text_surface.get_height() / 2
 
 
 class ImageObject:
@@ -175,16 +234,30 @@ class ImageObject:
         self.scale: float = scale
         self.rotation: float = 0
         self.dummy: float = 0
+        self._last_rotation = None
+        self._last_zoom = None
+        self._cached_image = None
 
-    def draw(self, screen: pygame.Surface) -> None:
-        rotated_image: pygame.Surface = pygame.transform.rotate(
-            self.image, self.rotation)
-        scaled_image: pygame.Surface = pygame.transform.scale(
-            rotated_image, (int(rotated_image.get_width() * self.scale),
-                            int(rotated_image.get_height() * self.scale)))
-        screen.blit(scaled_image, (
-            self.x - scaled_image.get_width() / 2,
-            self.y - scaled_image.get_height() / 2))
+    def draw(self, window: 'Window') -> None:
+        z = window.get_zoom()
+        if (self._last_rotation != self.rotation or self._last_zoom != z 
+                or self._cached_image is None):
+            rotated_image: pygame.Surface = pygame.transform.rotate(
+                self.image, self.rotation)
+            w = int(rotated_image.get_width() * self.scale * z)
+            h = int(rotated_image.get_height() * self.scale * z)
+            if w > 0 and h > 0:
+                self._cached_image = pygame.transform.scale(rotated_image, (w, h))
+            else:
+                self._cached_image = None
+            self._last_rotation = self.rotation
+            self._last_zoom = z
+            
+        if self._cached_image:
+            sx, sy = window.world_to_screen((self.x, self.y))
+            window.screen.blit(self._cached_image, (
+                sx - self._cached_image.get_width() / 2,
+                sy - self._cached_image.get_height() / 2))
 
     def move(self, x: float, y: float) -> None:
         self.x = x
@@ -229,6 +302,16 @@ class Rect:
             self.rotated_img: pygame.Surface = self.debug_img
         else:
             self.rotated_img: pygame.Surface = self.rect
+
+        self._last_zoom = None
+        self._last_z = None
+        self._last_width = None
+        self._last_height = None
+        self._last_radius = None
+        self._last_color = None
+        self._last_alpha = None
+        self._last_debug = None
+        self._cached_rect_image = None
 
     def center(self) -> tuple[float, float]:
         return (self.x - self.width / 2, self.y - self.height / 2)
@@ -286,42 +369,59 @@ class Rect:
             self.vel_x, self.vel_y, self.vel_z = 0, 0, 0
             self.is_mooving = False
 
-        if self.debug and self.alive:
-            # draw a line to see the destination
-            pygame.draw.line(window.screen,
-                             (255, 255, 255),
-                             self.get_pos(),  # type:ignore
-                             (self.target_x, self.target_y))
-
-    def draw(self, screen: pygame.Surface) -> None:
+    def draw(self, window: 'Window') -> None:
         if not self.alive:
             return
         if self.is_mooving:
             self.handle_moves()
-        if self.radius:
-            # if recthas radius, create a rect inside
-            # surface to have rounded corner
-            self.rect.fill((0, 0, 0, 0))
-            pygame.draw.rect(self.rect,
-                             (self.color[0],
-                              self.color[1],
-                              self.color[2],
-                              self.alpha),
-                             (0, 0, self.width,
-                              self.height),
-                             border_radius=self.radius)
-        else:
-            self.rect.fill((self.color[0],
-                            self.color[1],
-                            self.color[2],
-                            self.alpha))
+
+        z = window.get_zoom()
+        
+        if (self._last_zoom != z or self._last_z != self.z or
+            self._last_width != self.width or self._last_height != self.height or
+            self._last_radius != self.radius or self._last_color != self.color or
+            self._last_alpha != self.alpha or self._last_debug != self.debug or
+            self._cached_rect_image is None):
+            
+            sw = int(self.width * z)
+            sh = int(self.height * z)
+            if sw > 0 and sh > 0:
+                scaled_rect = pygame.Surface((sw, sh), pygame.SRCALPHA)
+                if self.radius:
+                    pygame.draw.rect(scaled_rect,
+                                     (self.color[0], self.color[1], self.color[2], self.alpha),
+                                     (0, 0, sw, sh),
+                                     border_radius=int(self.radius * z))
+                else:
+                    scaled_rect.fill((self.color[0], self.color[1], self.color[2], self.alpha))
+                    
+                if self.debug and self.alive:
+                    scaled_debug = pygame.transform.scale(self.debug_img, (sw, sh))
+                    scaled_rect.blit(scaled_debug, (0, 0))
+                    
+                self._cached_rect_image = pygame.transform.rotate(
+                    scaled_rect, (self.z * -57.2958) - 90)  # Convert radians to deg
+            else:
+                self._cached_rect_image = None
+                
+            self._last_zoom = z
+            self._last_z = self.z
+            self._last_width = self.width
+            self._last_height = self.height
+            self._last_radius = self.radius
+            self._last_color = self.color
+            self._last_alpha = self.alpha
+            self._last_debug = self.debug
+
+        if self._cached_rect_image:
+            sx, sy = window.world_to_screen((self.x, self.y))
+            new_rect: pygame.Rect = self._cached_rect_image.get_rect(center=(sx, sy))
+            window.screen.blit(self._cached_rect_image, new_rect.topleft)
+            
         if self.debug and self.alive:
-            self.rect.blit(self.debug_img, (0, 0))
-        self.rotated_img = pygame.transform.rotate(
-            self.rect, (self.z * -57.2958) - 90)  # Convert radians to deg
-        new_rect: pygame.Rect = self.rotated_img.get_rect(
-            center=(self.x, self.y))
-        screen.blit(self.rotated_img, new_rect.topleft)
+            sx, sy = window.world_to_screen((self.x, self.y))
+            stx, sty = window.world_to_screen((self.target_x, self.target_y))
+            pygame.draw.line(window.screen, (255, 255, 255), (sx, sy), (stx, sty))
 
     def kill(self) -> None:
         self.alive = False
@@ -424,19 +524,42 @@ class Drone(Rect):
                 (random.random() * self.wander_margin * window.height + (
                     window.height * (1-self.wander_margin)) / 2))
 
-    def draw(self, screen: pygame.Surface) -> None:
+    def draw(self, window: 'Window') -> None:
         if not self.alive:
             return
         if self.is_mooving:
             self.handle_moves()
 
-        # Fetch the pre-rotated image directly from cache in O(1) time
         degrees: int = int((self.z * -57.2958) - 90) % 360
-        self.rotated_img = Drone._rotation_cache[self.image_path][degrees]
+        z = window.get_zoom()
 
-        new_rect: pygame.Rect = self.rotated_img.get_rect(
-            center=(self.x, self.y))
-        screen.blit(self.rotated_img, new_rect.topleft)
+        if (not hasattr(self, '_last_z_deg') or self._last_z_deg != degrees or 
+            not hasattr(self, '_last_zoom') or self._last_zoom != z or 
+            not hasattr(self, '_cached_drone_img') or self._cached_drone_img is None):
+
+            # Fetch the pre-rotated image directly from cache in O(1) time
+            self.rotated_img = Drone._rotation_cache[self.image_path][degrees]
+
+            sw = int(self.rotated_img.get_width() * z)
+            sh = int(self.rotated_img.get_height() * z)
+            
+            if sw > 0 and sh > 0:
+                self._cached_drone_img = pygame.transform.scale(self.rotated_img, (sw, sh))
+            else:
+                self._cached_drone_img = None
+
+            self._last_z_deg = degrees
+            self._last_zoom = z
+            
+        if hasattr(self, '_cached_drone_img') and self._cached_drone_img:
+            sx, sy = window.world_to_screen((self.x, self.y))
+            new_rect: pygame.Rect = self._cached_drone_img.get_rect(center=(sx, sy))
+            window.screen.blit(self._cached_drone_img, new_rect.topleft)
+
+        if self.debug and self.alive:
+            sx, sy = window.world_to_screen((self.x, self.y))
+            stx, sty = window.world_to_screen((self.target_x, self.target_y))
+            pygame.draw.line(window.screen, (255, 255, 255), (sx, sy), (stx, sty))
 
 
 if __name__ == "__main__":
@@ -461,6 +584,7 @@ if __name__ == "__main__":
     spawn_button.hook = spawn_more_drones
     objects.append(spawn_button)
     drones_count = Text(10, 40, 24, f"Drones: {len(drones)}")
+    pan_active = False
     while running:
         for event in pygame.event.get():
             if event.type == pygame.KEYDOWN:
@@ -476,29 +600,51 @@ if __name__ == "__main__":
                     else:
                         objects[0].color = (50, 150, 70)
                         objects[0].alpha = 255
+            if event.type == pygame.MOUSEWHEEL:
+                mouse_x, mouse_y = pygame.mouse.get_pos()
+                world_x, world_y = window.screen_to_world((mouse_x, mouse_y))
+                if event.y > 0:
+                    window.zoom(1.1)
+                elif event.y < 0:
+                    window.zoom(1 / 1.1)
+                window.set_offset(
+                    mouse_x - world_x * window.get_zoom(),
+                    mouse_y - world_y * window.get_zoom()
+                )
             if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 2:
+                    pan_active = True
                 if event.button == 1:  # Left mouse button
-                    if isinstance(objects[3], Button) and objects[3].is_hovered(event.pos):
-                        objects[3].click(event.pos)
+                    world_pos = window.screen_to_world(event.pos)
+                    if isinstance(objects[3], Button) and objects[3].is_hovered(world_pos):
+                        objects[3].click(world_pos)
                     else:
-                        objects[0].move(event.pos[0], event.pos[1])
+                        objects[0].move(world_pos[0], world_pos[1])
                         objects[2].radius = 15
                         objects[2].width = 30
                         objects[2].height = 30
-                        objects[2].tp(event.pos[0], event.pos[1])
+                        objects[2].tp(world_pos[0], world_pos[1])
+            if event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 2:
+                    pan_active = False
+            if event.type == pygame.MOUSEMOTION:
+                if pan_active:
+                    window.pan(event.rel[0], event.rel[1])
             if stick:
-                objects[0].move(pygame.mouse.get_pos()[0],
-                                pygame.mouse.get_pos()[1])
+                world_pos = window.screen_to_world(pygame.mouse.get_pos())
+                objects[0].move(world_pos[0], world_pos[1])
         all_game_drones = [objects[0]] + drones
         for d in all_game_drones:
             d.handle_collisions(all_game_drones, window.width, window.height)
 
+        window.draw_background()
+
         for obj in objects:
             if isinstance(obj, Button):
-                obj.is_hovered(pygame.mouse.get_pos())
-            obj.draw(window.screen)
+                obj.is_hovered(window.screen_to_world(pygame.mouse.get_pos()))
+            obj.draw(window)
         for drone in drones:
-            drone.draw(window.screen)
+            drone.draw(window)
             if pygame.time.get_ticks() / 1000 - drone.last_mooved > drone.moove_cooldown + 2:
                 drone.wander(window)
         objects[1].dummy += 0.05
