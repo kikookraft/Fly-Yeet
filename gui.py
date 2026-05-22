@@ -453,7 +453,13 @@ if __name__ == "__main__":
         image_path="assets/drone2.png"
         ) for _ in range(10)]
     fps = Text(10, 10, 24, "FPS: 0")
-    objects.append(Button(100, 100, 130, 50, "Click Me", 5))
+    spawn_button = Button(100, 100, 200, 50, "Spawn Drones", 5)
+    def spawn_more_drones():
+        drones.extend([Drone(
+            300, 300, debug=True, cooldown=random.uniform(0.1, 2.0)
+        ) for _ in range(10)])
+    spawn_button.hook = spawn_more_drones
+    objects.append(spawn_button)
     drones_count = Text(10, 40, 24, f"Drones: {len(drones)}")
     while running:
         for event in pygame.event.get():
@@ -470,19 +476,16 @@ if __name__ == "__main__":
                     else:
                         objects[0].color = (50, 150, 70)
                         objects[0].alpha = 255
-                if event.key == pygame.K_c:
-                    drones.extend([Drone(
-                        300, 300, debug=True, cooldown=random.uniform(0.1, 2.0)
-                    ) for _ in range(10)])
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left mouse button
-                    objects[0].move(event.pos[0], event.pos[1])
-                    objects[2].radius = 15
-                    objects[2].width = 30
-                    objects[2].height = 30
-                    objects[2].tp(event.pos[0], event.pos[1])
-                    objects[3].text.set_text("Clicked!")
-                    objects[3].is_hovered(event.pos)
+                    if isinstance(objects[3], Button) and objects[3].is_hovered(event.pos):
+                        objects[3].click(event.pos)
+                    else:
+                        objects[0].move(event.pos[0], event.pos[1])
+                        objects[2].radius = 15
+                        objects[2].width = 30
+                        objects[2].height = 30
+                        objects[2].tp(event.pos[0], event.pos[1])
             if stick:
                 objects[0].move(pygame.mouse.get_pos()[0],
                                 pygame.mouse.get_pos()[1])
