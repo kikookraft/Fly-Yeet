@@ -1,4 +1,5 @@
 import random
+from typing import Callable, Dict
 
 import pygame
 import math
@@ -46,10 +47,10 @@ class Window:
 
 class Text:
     def __init__(self,
-                 x: float,
-                 y: float,
-                 size: int,
-                 text: str,
+                 x: float = 0,
+                 y: float = 0,
+                 size: int = 36,
+                 text: str = "",
                  color: tuple[int, int, int] = (255, 255, 255)) -> None:
         self.x: float = x
         self.y: float = y
@@ -75,6 +76,90 @@ class Text:
 
     def set_color(self, color: tuple[int, int, int]) -> None:
         self.text_surface = self.font.render(self.text, True, color)
+
+
+class Button:
+    def __init__(self,
+                 x: float,
+                 y: float,
+                 width: float,
+                 height: float,
+                 text: Text | str,
+                 radius: int = 0) -> None:
+        self.x: float = x
+        self.y: float = y
+        self.width: float = width
+        self.height: float = height
+        self.text: Text = text if isinstance(text, Text) else Text(
+            x=0, y=0, text=text)
+        self.text.x = self.x - self.text.text_surface.get_width() / 2
+        self.text.y = self.y - self.text.text_surface.get_height() / 2
+        self.radius: int = radius
+        self.enabled: bool = True
+        self.color: tuple[int, int, int] = (100, 100, 100)
+        self.disabled_color: tuple[int, int, int] = (150, 150, 150)
+        self.hover_color: tuple[int, int, int] = (175, 175, 175)
+        self.hovered: bool = False
+        self.prev_hovered: bool = False
+        self.hook: Callable[[], None] = lambda: None
+        self.hook_args: Dict[str, object] = {}
+        self.anim_time: float = .15
+        self.start_time: float = 0
+        self.end_time: float = 0
+
+    def is_hovered(self, mouse_pos: tuple[int, int]) -> bool:
+        if not self.enabled:
+            return False
+        cx, cy = self.center()
+        self.hovered = (cx <= mouse_pos[0] <= cx + self.width and
+                        cy <= mouse_pos[1] <= cy + self.height)
+        if self.hovered != self.prev_hovered:
+            self.start_time = pygame.time.get_ticks() / 1000
+            self.end_time = self.start_time + self.anim_time
+        self.prev_hovered = self.hovered
+        return self.hovered
+
+    def click(self, mouse_pos: tuple[int, int]) -> None:
+        if self.enabled and self.is_hovered(mouse_pos):
+            self.hook(**self.hook_args)
+
+    def center(self) -> tuple[float, float]:
+        return (self.x - self.width / 2, self.y - self.height / 2)
+
+    def draw(self, screen: pygame.Surface) -> None:
+        if not self.enabled:
+            return
+        # detect hover animation
+        if pygame.time.get_ticks() / 1000 < self.end_time:
+            completion: float = (
+                pygame.time.get_ticks() / 1000 - self.start_time
+                ) / self.anim_time
+            completion = max(0, min(1, completion))
+            if self.hovered:
+                target_color: tuple[int, int, int] = self.hover_color
+                from_color: tuple[int, int, int] = self.color
+            else:
+                target_color: tuple[int, int, int] = self.color
+                from_color: tuple[int, int, int] = self.hover_color
+            actual_color: tuple[int, int, int] = (
+                int(bezier(completion) * target_color[0] + (
+                    1 - bezier(completion)) * from_color[0]),
+                int(bezier(completion) * target_color[1] + (
+                    1 - bezier(completion)) * from_color[1]),
+                int(bezier(completion) * target_color[2] + (
+                    1 - bezier(completion)) * from_color[2])
+            )
+        else:
+            if self.hovered:
+                actual_color: tuple[int, int, int] = self.hover_color
+            else:
+                actual_color: tuple[int, int, int] = self.color
+
+        pygame.draw.rect(screen, actual_color,
+                         (self.center()[0], self.center()[1],
+                          self.width, self.height),
+                         border_radius=self.radius)
+        self.text.draw(screen)
 
 
 class ImageObject:
@@ -134,9 +219,10 @@ class Rect:
         self.move_power: float = 1.5
         self.radius: int = radius
         self.debug: bool = debug
+        self.alive: bool = True
         self.rect: pygame.Surface = pygame.Surface(
             (self.width, self.height), pygame.SRCALPHA)
-        if debug:
+        if debug and self.alive:
             self.debug_img: pygame.Surface = pygame.transform.scale(
                 pygame.image.load("assets/up.png").convert_alpha(),
                 (int(self.width), int(self.height)))
@@ -200,7 +286,7 @@ class Rect:
             self.vel_x, self.vel_y, self.vel_z = 0, 0, 0
             self.is_mooving = False
 
-        if self.debug:
+        if self.debug and self.alive:
             # draw a line to see the destination
             pygame.draw.line(window.screen,
                              (255, 255, 255),
@@ -208,6 +294,8 @@ class Rect:
                              (self.target_x, self.target_y))
 
     def draw(self, screen: pygame.Surface) -> None:
+        if not self.alive:
+            return
         if self.is_mooving:
             self.handle_moves()
         if self.radius:
@@ -227,13 +315,19 @@ class Rect:
                             self.color[1],
                             self.color[2],
                             self.alpha))
-        if self.debug:
+        if self.debug and self.alive:
             self.rect.blit(self.debug_img, (0, 0))
         self.rotated_img = pygame.transform.rotate(
             self.rect, (self.z * -57.2958) - 90)  # Convert radians to deg
         new_rect: pygame.Rect = self.rotated_img.get_rect(
             center=(self.x, self.y))
         screen.blit(self.rotated_img, new_rect.topleft)
+
+    def kill(self) -> None:
+        self.alive = False
+
+    def god_touch(self) -> None:
+        self.alive = True
 
 
 class Drone(Rect):
@@ -258,7 +352,7 @@ class Drone(Rect):
         # this allow to avoid calling pygame.rotate for every images
         if image_path not in Drone._rotation_cache:
             Drone._rotation_cache[image_path] = {}
-            base_img = pygame.transform.scale(
+            base_img: pygame.Surface = pygame.transform.scale(
                 pygame.image.load(image_path).convert_alpha(),
                 (int(self.width * self.scale),
                     int(self.height * self.scale)))
@@ -275,6 +369,8 @@ class Drone(Rect):
             all_drones: list["Drone"],
             window_width: int,
             window_height: int) -> None:
+        if not self.alive:
+            return
         hitbox_radius: float = 100  # Safe distance between drones
 
         # Border collision
@@ -317,6 +413,8 @@ class Drone(Rect):
                 other.is_mooving = True
 
     def wander(self, window: Window) -> None:
+        if not self.alive:
+            return
         if pygame.time.get_ticks() / 1000 - \
                 self.last_mooved > self.moove_cooldown:
             # find a random position and go to it
@@ -327,6 +425,8 @@ class Drone(Rect):
                     window.height * (1-self.wander_margin)) / 2))
 
     def draw(self, screen: pygame.Surface) -> None:
+        if not self.alive:
+            return
         if self.is_mooving:
             self.handle_moves()
 
@@ -353,6 +453,7 @@ if __name__ == "__main__":
         image_path="assets/drone2.png"
         ) for _ in range(10)]
     fps = Text(10, 10, 24, "FPS: 0")
+    objects.append(Button(100, 100, 130, 50, "Click Me", 5))
     drones_count = Text(10, 40, 24, f"Drones: {len(drones)}")
     while running:
         for event in pygame.event.get():
@@ -380,6 +481,8 @@ if __name__ == "__main__":
                     objects[2].width = 30
                     objects[2].height = 30
                     objects[2].tp(event.pos[0], event.pos[1])
+                    objects[3].text.set_text("Clicked!")
+                    objects[3].is_hovered(event.pos)
             if stick:
                 objects[0].move(pygame.mouse.get_pos()[0],
                                 pygame.mouse.get_pos()[1])
@@ -388,6 +491,8 @@ if __name__ == "__main__":
             d.handle_collisions(all_game_drones, window.width, window.height)
 
         for obj in objects:
+            if isinstance(obj, Button):
+                obj.is_hovered(pygame.mouse.get_pos())
             obj.draw(window.screen)
         for drone in drones:
             drone.draw(window.screen)
