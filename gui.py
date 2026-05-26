@@ -926,10 +926,7 @@ class Drone(Rect):
         self.friction = .9
         self.move_power = 0.1
         self.wander_margin: float = .8
-        self.moove_cooldown: float = _ensure_number(
-            cooldown, "cooldown")
-        if self.moove_cooldown < 0:
-            raise ValueError("cooldown must be non-negative")
+        self.moove_cooldown: float = cooldown
         self.last_mooved: float = 0
         self.scale: float = 3.0
         self.image_path: str = image_path
@@ -988,7 +985,7 @@ class Drone(Rect):
 
     def wander(self, window: Window) -> None:
         """Send the drone to a random target."""
-        if not self.alive:
+        if not self.alive or self.moove_cooldown < 0:
             return
         if (
             pygame.time.get_ticks() / 1000 - self.last_mooved

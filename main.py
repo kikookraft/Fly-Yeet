@@ -48,16 +48,26 @@ class App:
 
     def _build_background(self) -> None:
         self.renderer.clear_layer(0)
-        self.bg_drones: list[gui.Drone] = [
-            gui.Drone(
-                random.uniform(100, 800),
-                random.uniform(100, 600),
-                debug=False,
-                cooldown=random.uniform(0.2, 1.0),
-                image_path="assets/drone2.png",
-            )
-            for _ in range(8)
-        ]
+        self.bg_drones: list[gui.Drone] = []
+        for i in range(8):
+            if i % 2 == 0:
+                self.bg_drones.append(
+                    gui.Drone(
+                        random.uniform(300, self.window.width - 300),
+                        random.uniform(300, self.window.height - 300),
+                        debug=False,
+                        cooldown=-1,
+                        image_path="assets/cardbox.png",
+                    )
+                )
+            self.bg_drones.append(
+                gui.Drone(
+                    random.uniform(300, self.window.width - 300),
+                    random.uniform(300, self.window.height - 300),
+                    debug=False,
+                    cooldown=random.uniform(0.2, 1.0),
+                    image_path="assets/drone2.png",
+                ))
         for d in self.bg_drones:
             self.renderer.add(d, layer=0)
 
