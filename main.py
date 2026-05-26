@@ -53,7 +53,7 @@ class App:
             if i % 2 == 0:
                 self.bg_drones.append(
                     gui.Drone(
-                        random.uniform(300, self.window.width - 300),
+                        random.uniform(500, self.window.width - 500),
                         random.uniform(300, self.window.height - 300),
                         debug=False,
                         cooldown=-1,
