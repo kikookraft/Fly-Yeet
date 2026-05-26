@@ -458,30 +458,37 @@ class Button:
         if not self.enabled:
             return
         # detect hover animation
+        actual_color: tuple[int, int, int]
         if pygame.time.get_ticks() / 1000 < self.end_time:
             completion: float = (
                 pygame.time.get_ticks() / 1000 - self.start_time
-                ) / self.anim_time
+            ) / self.anim_time
             completion = max(0, min(1, completion))
             if self.hovered:
-                target_color: tuple[int, int, int] = self.hover_color
-                from_color: tuple[int, int, int] = self.color
+                target_color = self.hover_color
+                from_color = self.color
             else:
-                target_color: tuple[int, int, int] = self.color
-                from_color: tuple[int, int, int] = self.hover_color
-            actual_color: tuple[int, int, int] = (
-                int(bezier(completion) * target_color[0] + (
-                    1 - bezier(completion)) * from_color[0]),
-                int(bezier(completion) * target_color[1] + (
-                    1 - bezier(completion)) * from_color[1]),
-                int(bezier(completion) * target_color[2] + (
-                    1 - bezier(completion)) * from_color[2])
+                target_color = self.color
+                from_color = self.hover_color
+            actual_color = (
+                int(
+                    bezier(completion) * target_color[0]
+                    + (1 - bezier(completion)) * from_color[0]
+                ),
+                int(
+                    bezier(completion) * target_color[1]
+                    + (1 - bezier(completion)) * from_color[1]
+                ),
+                int(
+                    bezier(completion) * target_color[2]
+                    + (1 - bezier(completion)) * from_color[2]
+                ),
             )
         else:
             if self.hovered:
-                actual_color: tuple[int, int, int] = self.hover_color
+                actual_color = self.hover_color
             else:
-                actual_color: tuple[int, int, int] = self.color
+                actual_color = self.color
 
         cx, cy = self.center()
         scx, scy = window.world_to_screen((cx, cy))
@@ -518,14 +525,15 @@ class ImageObject:
         self.scale: float = _ensure_number(scale, "scale", positive=True)
         self.rotation: float = 0
         self.dummy: float = 0
-        self._last_rotation = None
-        self._last_zoom = None
-        self._cached_image = None
+        self._last_rotation: float | None = None
+        self._last_zoom: float | None = None
+        self._cached_image: pygame.Surface | None = None
 
     def draw(self, window: 'Window') -> None:
         """Draw the image object."""
         z = window.get_zoom()
-        if (self._last_rotation != self.rotation or self._last_zoom != z
+        if (self._last_rotation != self.rotation
+                or self._last_zoom != z
                 or self._cached_image is None):
             rotated_image: pygame.Surface = pygame.transform.rotate(
                 self.image, self.rotation)
@@ -533,7 +541,8 @@ class ImageObject:
             h = int(rotated_image.get_height() * self.scale * z)
             if w > 0 and h > 0:
                 self._cached_image = pygame.transform.scale(
-                    rotated_image, (w, h))
+                    rotated_image, (w, h)
+                )
             else:
                 self._cached_image = None
             self._last_rotation = self.rotation
@@ -623,23 +632,22 @@ class Rect:
         self.alive: bool = True
         self.rect: pygame.Surface = pygame.Surface(
             (int(self.width), int(self.height)), pygame.SRCALPHA)
+        self.rotated_img: pygame.Surface = self.rect
         if debug and self.alive:
             self.debug_img: pygame.Surface = pygame.transform.scale(
                 pygame.image.load("assets/up.png").convert_alpha(),
                 (int(self.width), int(self.height)))
-            self.rotated_img: pygame.Surface = self.debug_img
-        else:
-            self.rotated_img: pygame.Surface = self.rect
+            self.rotated_img = self.debug_img
 
-        self._last_zoom = None
-        self._last_z = None
-        self._last_width = None
-        self._last_height = None
-        self._last_radius = None
-        self._last_color = None
-        self._last_alpha = None
-        self._last_debug = None
-        self._cached_rect_image = None
+        self._last_zoom: float | None = None
+        self._last_z: float | None = None
+        self._last_width: float | None = None
+        self._last_height: float | None = None
+        self._last_radius: int | None = None
+        self._last_color: tuple[int, int, int] | None = None
+        self._last_alpha: int | None = None
+        self._last_debug: bool | None = None
+        self._cached_rect_image: pygame.Surface | None = None
 
     def center(self) -> tuple[float, float]:
         """Return the rectangle center."""
@@ -753,8 +761,8 @@ class Rect:
         dx = _ensure_number(dx, "dx")
         dy = _ensure_number(dy, "dy")
         self.is_mooving = True
-        self.target_x: float = self.x + dx
-        self.target_y: float = self.y + dy
+        self.target_x = self.x + dx
+        self.target_y = self.y + dy
         self.rotate_focus(self.target_x, self.target_y)
 
     def move(self, x: float, y: float) -> None:
@@ -762,8 +770,8 @@ class Rect:
         x = _ensure_number(x, "x")
         y = _ensure_number(y, "y")
         self.is_mooving = True
-        self.target_x: float = x
-        self.target_y: float = y
+        self.target_x = x
+        self.target_y = y
         self.rotate_focus(self.target_x, self.target_y)
 
     def tp(self, x: float, y: float) -> None:
@@ -906,6 +914,10 @@ class Drone(Rect):
         self.scale: float = 3.0
         self.image_path: str = image_path
 
+        self._last_z_deg: int | None = None
+        self._last_zoom: float | None = None
+        self._cached_drone_img: pygame.Surface | None = None
+
         # Initialize dictionary of 360 rotated versions ONCE for each image
         # this allow to avoid calling pygame.rotate for every images
         if image_path not in Drone._rotation_cache:
@@ -1034,7 +1046,7 @@ if __name__ == "__main__":
     fps = Text(10, 10, 24, "FPS: 0")
     spawn_button = Button(100, 100, 200, 50, "Spawn Drones", 5)
 
-    def spawn_more_drones():
+    def spawn_more_drones() -> None:
         """Spawn a batch of drones."""
         drones.extend([Drone(
             300, 300, debug=True, cooldown=random.uniform(0.1, 2.0)
@@ -1055,7 +1067,7 @@ if __name__ == "__main__":
                 if event.key == pygame.K_ESCAPE or event.key == pygame.K_q:
                     running = False
                 if event.key == pygame.K_p:
-                    stick: bool = not stick
+                    stick = not stick
                 if event.key == pygame.K_d:
                     lead_drone.debug = not lead_drone.debug
                     if lead_drone.debug:
