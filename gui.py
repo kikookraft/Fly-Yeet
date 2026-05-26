@@ -1,3 +1,4 @@
+import os
 import random
 from typing import Callable, Dict
 
@@ -5,12 +6,80 @@ import pygame
 import math
 
 pygame.init()
-CELLS = 25
+CELLS = 50
 
 
 def bezier(x: float) -> float:
     """calculate bezier curve for smooth moves or transitions"""
     return 3 * x**2 - 2 * x**3
+
+
+def _ensure_number(
+    value: float,
+    name: str,
+    *,
+    positive: bool = False,
+) -> float:
+    """Validate a numeric value."""
+    if type(value) not in (int, float):
+        raise TypeError(f"{name} must be a number")
+    numeric_value = float(value)
+    if positive and numeric_value <= 0:
+        raise ValueError(f"{name} must be greater than 0")
+    return numeric_value
+
+
+def _ensure_int(
+    value: float,
+    name: str,
+    *,
+    minimum: int | None = None,
+) -> int:
+    """Validate an integer value."""
+    numeric_value = _ensure_number(value, name)
+    if not numeric_value.is_integer():
+        raise ValueError(f"{name} must be an integer")
+    integer_value = int(numeric_value)
+    if minimum is not None and integer_value < minimum:
+        raise ValueError(f"{name} must be greater than or equal to {minimum}")
+    return integer_value
+
+
+def _ensure_color(
+    color: tuple[int, int, int],
+    name: str = "color",
+) -> tuple[int, int, int]:
+    """Validate an RGB color."""
+    if type(color) is not tuple or len(color) != 3:
+        raise TypeError(f"{name} must be a tuple of 3 integers")
+    red = _ensure_int(color[0], f"{name} channel", minimum=0)
+    green = _ensure_int(color[1], f"{name} channel", minimum=0)
+    blue = _ensure_int(color[2], f"{name} channel", minimum=0)
+    if any(channel > 255 for channel in (red, green, blue)):
+        raise ValueError(f"{name} channels must be between 0 and 255")
+    return (red, green, blue)
+
+
+def _ensure_point(
+    point: tuple[float, float],
+    name: str = "position",
+) -> tuple[float, float]:
+    """Validate a 2D point."""
+    if type(point) is not tuple or len(point) != 2:
+        raise TypeError(f"{name} must be a tuple of 2 numbers")
+    return (
+        _ensure_number(point[0], f"{name} x"),
+        _ensure_number(point[1], f"{name} y"),
+    )
+
+
+def _ensure_image_path(image_path: str) -> str:
+    """Validate an image path."""
+    if type(image_path) is not str:
+        raise TypeError("image_path must be a string")
+    if not os.path.isfile(image_path):
+        raise FileNotFoundError(f"image_path does not exist: {image_path}")
+    return image_path
 
 
 class Window:
@@ -19,10 +88,11 @@ class Window:
             width: int = 3000,
             height: int = 1500,
             fps: int = 100) -> None:
+        """Create a window."""
+        self.width: int = _ensure_int(width, "width", minimum=1)
+        self.height: int = _ensure_int(height, "height", minimum=1)
+        self.fps: int = _ensure_int(fps, "fps", minimum=1)
         self.current_fps: float = 0
-        self.width: int = width
-        self.height: int = height
-        self.fps: int = fps
         self._zoom: float = 1.0
         self.offset: tuple[float, float] = (0, 0)
         self.screen: pygame.Surface = pygame.display.set_mode(
@@ -31,60 +101,104 @@ class Window:
         pygame.display.set_caption("Fly YEEET")
         self.background_tile: pygame.Surface = pygame.image.load(
             "assets/tile.png").convert()
-        self.bg_w = self.background_tile.get_width()
-        self.bg_h = self.background_tile.get_height()
+        self.bg_w: int = self.background_tile.get_width()
+        self.bg_h: int = self.background_tile.get_height()
 
     def draw_background(self) -> None:
+        """Draw the tiled background."""
         self.screen.fill((0, 0, 0))
         # Tile background infinitely based on camera offset and zoom
-        scaled_w = int(self.bg_w * self._zoom)
-        scaled_h = int(self.bg_h * self._zoom)
+        scaled_w: int = int(self.bg_w * self._zoom)
+        scaled_h: int = int(self.bg_h * self._zoom)
         if scaled_w <= 0 or scaled_h <= 0:
             return
-        
-        scaled_tile = pygame.transform.scale(self.background_tile, (scaled_w, scaled_h))
-        
-        start_x = int(self.offset[0] % scaled_w)
-        if start_x > 0: start_x -= scaled_w
-        start_y = int(self.offset[1] % scaled_h)
-        if start_y > 0: start_y -= scaled_h
+
+        scaled_tile: pygame.Surface = pygame.transform.scale(
+            self.background_tile, (scaled_w, scaled_h))
+
+        start_x: int = int(self.offset[0] % scaled_w)
+        if start_x > 0:
+            start_x -= scaled_w
+        start_y: int = int(self.offset[1] % scaled_h)
+        if start_y > 0:
+            start_y -= scaled_h
 
         for x in range(start_x, self.width, scaled_w):
             for y in range(start_y, self.height, scaled_h):
                 self.screen.blit(scaled_tile, (x, y))
 
     def update(self) -> None:
+        """Refresh the frame."""
         pygame.display.flip()
         self.clock.tick(self.fps)
         self.current_fps = math.floor(self.clock.get_fps())
 
     def screen_to_world(self, pos: tuple[float, float]) -> tuple[int, int]:
+        """Convert screen coordinates to world coordinates."""
         return (int((pos[0] - self.offset[0]) / self._zoom),
                 int((pos[1] - self.offset[1]) / self._zoom))
 
     def world_to_screen(self, pos: tuple[float, float]) -> tuple[int, int]:
+        """Convert world coordinates to screen coordinates."""
         return (int(pos[0] * self._zoom + self.offset[0]),
                 int(pos[1] * self._zoom + self.offset[1]))
 
     def zoom(self, factor: float) -> None:
+        """Apply a zoom factor."""
+        factor = _ensure_number(factor, "factor", positive=True)
         self._zoom *= factor
         # Limit the unzoom to 3 times the original size
         if self._zoom < 0.33333333:
             self._zoom = 0.33333333
+        elif self._zoom > 2:
+            self._zoom = 2
+
+    def set_zoom(self, zoom_value: float) -> None:
+        """Set the zoom level."""
+        self._zoom = _ensure_number(zoom_value, "zoom_value", positive=True)
+        if self._zoom < 0.33333333:
+            self._zoom = 0.33333333
+        elif self._zoom > 2:
+            self._zoom = 2
 
     def pan(self, dx: float, dy: float) -> None:
+        """Move the camera offset."""
+        dx = _ensure_number(dx, "dx")
+        dy = _ensure_number(dy, "dy")
         self.offset = (self.offset[0] + dx, self.offset[1] + dy)
 
     def set_offset(self, x: float, y: float) -> None:
+        """Set the camera offset."""
+        x = _ensure_number(x, "x")
+        y = _ensure_number(y, "y")
         self.offset = (x, y)
 
+    def get_width(self) -> int:
+        """Return the window width."""
+        return self.width
+
+    def get_height(self) -> int:
+        """Return the window height."""
+        return self.height
+
+    def get_fps_limit(self) -> int:
+        """Return the target frame rate."""
+        return self.fps
+
+    def get_screen(self) -> pygame.Surface:
+        """Return the screen surface."""
+        return self.screen
+
     def get_zoom(self) -> float:
+        """Return the current zoom level."""
         return self._zoom
 
     def get_offset(self) -> tuple[float, float]:
+        """Return the current camera offset."""
         return self.offset
 
     def get_fps(self) -> float:
+        """Return the measured frame rate."""
         return self.current_fps
 
 
@@ -95,30 +209,69 @@ class Text:
                  size: int = 36,
                  text: str = "",
                  color: tuple[int, int, int] = (255, 255, 255)) -> None:
-        self.x: float = x
-        self.y: float = y
-        self.size: int = size
+        """Create a text label."""
+        self.x: float = _ensure_number(x, "x")
+        self.y: float = _ensure_number(y, "y")
+        self.size: int = _ensure_int(size, "size", minimum=1)
         self.text: str = text
+        self.color: tuple[int, int, int] = _ensure_color(color)
         self.font: pygame.font.Font = pygame.font.SysFont(None, self.size)
         self.text_surface: pygame.Surface = self.font.render(
-            self.text, True, color)
+            self.text, True, self.color)
 
     def draw(self, screen: pygame.Surface) -> None:
+        """Draw the text label."""
         screen.blit(self.text_surface, (self.x, self.y))
 
     def set_text(self, text: str) -> None:
+        """Set the text content."""
+        if type(text) is not str:
+            raise TypeError("text must be a string")
         if text != self.text:
             self.text = text
             self.text_surface = self.font.render(
-                self.text, True, (255, 255, 255))
+                self.text, True, self.color)
 
     def set_size(self, size: int) -> None:
-        self.size = size
+        """Set the font size."""
+        self.size = _ensure_int(size, "size", minimum=1)
         self.font = pygame.font.SysFont(None, self.size)
-        self.text_surface = self.font.render(self.text, True, (255, 255, 255))
+        self.text_surface = self.font.render(self.text, True, self.color)
 
     def set_color(self, color: tuple[int, int, int]) -> None:
-        self.text_surface = self.font.render(self.text, True, color)
+        """Set the text color."""
+        self.color = _ensure_color(color)
+        self.text_surface = self.font.render(self.text, True, self.color)
+
+    def set_pos(self, x: float | tuple[float, float], y: float | None = None
+                ) -> None:
+        """Set the text position."""
+        if isinstance(x, tuple):
+            self.x, self.y = _ensure_point(x, "position")
+        else:
+            self.x = _ensure_number(x, "x")
+            if y is not None:
+                self.y = _ensure_number(y, "y")
+
+    def get_pos(self) -> tuple[float, float]:
+        """Return the text position."""
+        return (self.x, self.y)
+
+    def get_text(self) -> str:
+        """Return the text content."""
+        return self.text
+
+    def get_size(self) -> tuple[int, int]:
+        """Return the text surface size."""
+        return (self.text_surface.get_width(), self.text_surface.get_height())
+
+    def get_font_size(self) -> int:
+        """Return the font size."""
+        return self.size
+
+    def get_color(self) -> tuple[int, int, int]:
+        """Return the text color."""
+        return self.color
 
 
 class Button:
@@ -129,15 +282,13 @@ class Button:
                  height: float,
                  text: Text | str,
                  radius: int = 0) -> None:
-        self.x: float = x
-        self.y: float = y
-        self.width: float = width
-        self.height: float = height
-        self.text: Text = text if isinstance(text, Text) else Text(
-            x=0, y=0, text=text)
-        self.text.x = self.x - self.text.text_surface.get_width() / 2
-        self.text.y = self.y - self.text.text_surface.get_height() / 2
-        self.radius: int = radius
+        """Create a button."""
+        self.x: float = _ensure_number(x, "x")
+        self.y: float = _ensure_number(y, "y")
+        self.width: float = _ensure_number(width, "width", positive=True)
+        self.height: float = _ensure_number(height, "height", positive=True)
+        self.text: Text = text if isinstance(text, Text) else Text(text=text)
+        self.radius: int = _ensure_int(radius, "radius", minimum=0)
         self.enabled: bool = True
         self.color: tuple[int, int, int] = (100, 100, 100)
         self.disabled_color: tuple[int, int, int] = (150, 150, 150)
@@ -149,13 +300,144 @@ class Button:
         self.anim_time: float = .15
         self.start_time: float = 0
         self.end_time: float = 0
+        self._center_text()
+
+    def _center_text(self) -> None:
+        """Center the label inside the button."""
+        self.text.x = self.x - self.text.text_surface.get_width() / 2
+        self.text.y = self.y - self.text.text_surface.get_height() / 2
+
+    def set_pos(self, x: float | tuple[float, float], y: float | None = None
+                ) -> None:
+        """Set the button position."""
+        if isinstance(x, tuple):
+            self.x, self.y = _ensure_point(x, "position")
+        else:
+            self.x = _ensure_number(x, "x")
+            if y is not None:
+                self.y = _ensure_number(y, "y")
+        self._center_text()
+
+    def get_pos(self) -> tuple[float, float]:
+        """Return the button position."""
+        return (self.x, self.y)
+
+    def get_width(self) -> float:
+        """Return the button width."""
+        return self.width
+
+    def set_width(self, width: float) -> None:
+        """Set the button width."""
+        self.width = _ensure_number(width, "width", positive=True)
+
+    def get_height(self) -> float:
+        """Return the button height."""
+        return self.height
+
+    def set_height(self, height: float) -> None:
+        """Set the button height."""
+        self.height = _ensure_number(height, "height", positive=True)
+
+    def get_radius(self) -> int:
+        """Return the button radius."""
+        return self.radius
+
+    def set_radius(self, radius: int) -> None:
+        """Set the button radius."""
+        self.radius = _ensure_int(radius, "radius", minimum=0)
+
+    def get_text(self) -> str:
+        """Return the button label."""
+        return self.text.get_text()
+
+    def set_text(self, text: Text | str) -> None:
+        """Set the button label."""
+        if isinstance(text, Text):
+            self.text = text
+        elif type(text) is str:
+            self.text.set_text(text)
+        else:
+            raise TypeError("text must be a Text or string")
+        self._center_text()
+
+    def get_text_object(self) -> Text:
+        """Return the text object."""
+        return self.text
+
+    def get_enabled(self) -> bool:
+        """Return whether the button is enabled."""
+        return self.enabled
+
+    def set_enabled(self, enabled: bool) -> None:
+        """Set whether the button is enabled."""
+        if type(enabled) is not bool:
+            raise TypeError("enabled must be a bool")
+        self.enabled = enabled
+
+    def get_color(self) -> tuple[int, int, int]:
+        """Return the base color."""
+        return self.color
+
+    def set_color(self, color: tuple[int, int, int]) -> None:
+        """Set the base color."""
+        self.color = _ensure_color(color)
+
+    def get_disabled_color(self) -> tuple[int, int, int]:
+        """Return the disabled color."""
+        return self.disabled_color
+
+    def set_disabled_color(self, color: tuple[int, int, int]) -> None:
+        """Set the disabled color."""
+        self.disabled_color = _ensure_color(color)
+
+    def get_hover_color(self) -> tuple[int, int, int]:
+        """Return the hover color."""
+        return self.hover_color
+
+    def set_hover_color(self, color: tuple[int, int, int]) -> None:
+        """Set the hover color."""
+        self.hover_color = _ensure_color(color)
+
+    def get_hook(self) -> Callable[..., None]:
+        """Return the button hook."""
+        return self.hook
+
+    def set_hook(self, hook: Callable[..., None]) -> None:
+        """Set the button hook."""
+        if not callable(hook):
+            raise TypeError("hook must be callable")
+        self.hook = hook
+
+    def get_hook_args(self) -> Dict[str, object]:
+        """Return the button hook arguments."""
+        return self.hook_args
+
+    def set_hook_args(self, hook_args: Dict[str, object]) -> None:
+        """Set the button hook arguments."""
+        if type(hook_args) is not dict:
+            raise TypeError("hook_args must be a dictionary")
+        self.hook_args = hook_args
+
+    def get_anim_time(self) -> float:
+        """Return the hover animation time."""
+        return self.anim_time
+
+    def set_anim_time(self, anim_time: float) -> None:
+        """Set the hover animation time."""
+        self.anim_time = _ensure_number(anim_time, "anim_time", positive=True)
 
     def is_hovered(self, mouse_pos: tuple[int, int]) -> bool:
+        """Return whether the button is hovered."""
         if not self.enabled:
             return False
-        cx, cy = self.center()
-        self.hovered = (cx <= mouse_pos[0] <= cx + self.width and
-                        cy <= mouse_pos[1] <= cy + self.height)
+        validated_mouse_x, validated_mouse_y = _ensure_point(
+            mouse_pos, "mouse_pos")
+        cx: float = self.center()[0]
+        cy: float = self.center()[1]
+        self.hovered = (
+            cx <= validated_mouse_x <= cx + self.width and
+            cy <= validated_mouse_y <= cy + self.height
+        )
         if self.hovered != self.prev_hovered:
             self.start_time = pygame.time.get_ticks() / 1000
             self.end_time = self.start_time + self.anim_time
@@ -163,13 +445,16 @@ class Button:
         return self.hovered
 
     def click(self, mouse_pos: tuple[int, int]) -> None:
+        """Invoke the hook when clicked."""
         if self.enabled and self.is_hovered(mouse_pos):
             self.hook(**self.hook_args)
 
     def center(self) -> tuple[float, float]:
+        """Return the top-left corner used for drawing."""
         return (self.x - self.width / 2, self.y - self.height / 2)
 
     def draw(self, window: 'Window') -> None:
+        """Draw the button."""
         if not self.enabled:
             return
         # detect hover animation
@@ -200,25 +485,22 @@ class Button:
 
         cx, cy = self.center()
         scx, scy = window.world_to_screen((cx, cy))
-        sw = int(self.width * window.get_zoom())
-        sh = int(self.height * window.get_zoom())
-        
+        sw: int = int(self.width * window.get_zoom())
+        sh: int = int(self.height * window.get_zoom())
+
         pygame.draw.rect(window.screen, actual_color,
                          (scx, scy, sw, sh),
                          border_radius=int(self.radius * window.get_zoom()))
-        
-        # simple scale for text position
-        stx, sty = window.world_to_screen((self.text.x, self.text.y))
-        
-        # update font size based on zoom temporarily
-        old_size = self.text.size
+
+        # update and adapt text to screen settings
+        old_size: int = self.text.size
         self.text.set_size(int(old_size * window.get_zoom()))
-        self.text.x, self.text.y = stx, sty
+        self.text.set_pos(window.world_to_screen((self.text.get_pos())))
         self.text.draw(window.screen)
-        
+
         # restore
         self.text.set_size(old_size)
-        self.text.x, self.text.y = cx + self.width / 2 - self.text.text_surface.get_width() / 2, cy + self.height / 2 - self.text.text_surface.get_height() / 2
+        self._center_text()
 
 
 class ImageObject:
@@ -227,11 +509,13 @@ class ImageObject:
                  x: float,
                  y: float,
                  scale: float = 1) -> None:
+        """Create an image object."""
+        self.image_path: str = _ensure_image_path(image_path)
         self.image: pygame.Surface = pygame.image.load(
-            image_path).convert_alpha()
-        self.x: float = x
-        self.y: float = y
-        self.scale: float = scale
+            self.image_path).convert_alpha()
+        self.x: float = _ensure_number(x, "x")
+        self.y: float = _ensure_number(y, "y")
+        self.scale: float = _ensure_number(scale, "scale", positive=True)
         self.rotation: float = 0
         self.dummy: float = 0
         self._last_rotation = None
@@ -239,20 +523,22 @@ class ImageObject:
         self._cached_image = None
 
     def draw(self, window: 'Window') -> None:
+        """Draw the image object."""
         z = window.get_zoom()
-        if (self._last_rotation != self.rotation or self._last_zoom != z 
+        if (self._last_rotation != self.rotation or self._last_zoom != z
                 or self._cached_image is None):
             rotated_image: pygame.Surface = pygame.transform.rotate(
                 self.image, self.rotation)
             w = int(rotated_image.get_width() * self.scale * z)
             h = int(rotated_image.get_height() * self.scale * z)
             if w > 0 and h > 0:
-                self._cached_image = pygame.transform.scale(rotated_image, (w, h))
+                self._cached_image = pygame.transform.scale(
+                    rotated_image, (w, h))
             else:
                 self._cached_image = None
             self._last_rotation = self.rotation
             self._last_zoom = z
-            
+
         if self._cached_image:
             sx, sy = window.world_to_screen((self.x, self.y))
             window.screen.blit(self._cached_image, (
@@ -260,8 +546,45 @@ class ImageObject:
                 sy - self._cached_image.get_height() / 2))
 
     def move(self, x: float, y: float) -> None:
-        self.x = x
-        self.y = y
+        """Move the image object."""
+        self.x = _ensure_number(x, "x")
+        self.y = _ensure_number(y, "y")
+
+    def get_pos(self) -> tuple[float, float]:
+        """Return the image position."""
+        return (self.x, self.y)
+
+    def set_pos(self, x: float, y: float) -> None:
+        """Set the image position."""
+        self.move(x, y)
+
+    def get_scale(self) -> float:
+        """Return the image scale."""
+        return self.scale
+
+    def set_scale(self, scale: float) -> None:
+        """Set the image scale."""
+        self.scale = _ensure_number(scale, "scale", positive=True)
+
+    def get_rotation(self) -> float:
+        """Return the image rotation."""
+        return self.rotation
+
+    def set_rotation(self, rotation: float) -> None:
+        """Set the image rotation."""
+        self.rotation = _ensure_number(rotation, "rotation")
+
+    def get_image_path(self) -> str:
+        """Return the image path."""
+        return self.image_path
+
+    def set_image_path(self, image_path: str) -> None:
+        """Set the image path."""
+        self.image_path = _ensure_image_path(image_path)
+        self.image = pygame.image.load(self.image_path).convert_alpha()
+        self._last_rotation = None
+        self._last_zoom = None
+        self._cached_image = None
 
 
 class Rect:
@@ -274,27 +597,32 @@ class Rect:
                  color: tuple[int, int, int] = (50, 150, 70),
                  alpha: int = 255,
                  debug: bool = False) -> None:
-        self.x: float = x
-        self.y: float = y
-        self.z: float = 0  # rotation -- looking up by default
+        """Create a rectangle object."""
+        self.x: float = _ensure_number(x, "x")
+        self.y: float = _ensure_number(y, "y")
+        self.z: float = 0
         self.vel_x: float = 0
         self.vel_y: float = 0
         self.vel_z: float = 0
-        self.width: float = width
-        self.height: float = height
-        self.color: tuple[int, int, int] = color
-        self.alpha: int = alpha
+        self.width: float = _ensure_number(width, "width")
+        self.height: float = _ensure_number(height, "height")
+        if self.width < 0 or self.height < 0:
+            raise ValueError("width and height must be non-negative")
+        self.color: tuple[int, int, int] = _ensure_color(color)
+        self.alpha: int = _ensure_int(alpha, "alpha", minimum=0)
+        if self.alpha > 255:
+            raise ValueError("alpha must be less than or equal to 255")
         self.is_mooving: bool = False
-        self.target_x: float = x
-        self.target_y: float = y
+        self.target_x: float = self.x
+        self.target_y: float = self.y
         self.target_z: float = self.z
         self.friction: float = .7
         self.move_power: float = 1.5
-        self.radius: int = radius
+        self.radius: int = _ensure_int(radius, "radius", minimum=0)
         self.debug: bool = debug
         self.alive: bool = True
         self.rect: pygame.Surface = pygame.Surface(
-            (self.width, self.height), pygame.SRCALPHA)
+            (int(self.width), int(self.height)), pygame.SRCALPHA)
         if debug and self.alive:
             self.debug_img: pygame.Surface = pygame.transform.scale(
                 pygame.image.load("assets/up.png").convert_alpha(),
@@ -314,20 +642,116 @@ class Rect:
         self._cached_rect_image = None
 
     def center(self) -> tuple[float, float]:
+        """Return the rectangle center."""
         return (self.x - self.width / 2, self.y - self.height / 2)
 
     def rotate(self, angle: float) -> None:
-        self.z = angle
+        """Set the rotation angle."""
+        self.z = _ensure_number(angle, "angle")
+
+    def get_z(self) -> float:
+        """Return the rotation."""
+        return self.z
+
+    def get_width(self) -> float:
+        """Return the width."""
+        return self.width
+
+    def set_width(self, width: float) -> None:
+        """Set the width."""
+        self.width = _ensure_number(width, "width")
+        if self.width < 0:
+            raise ValueError("width must be non-negative")
+
+    def get_height(self) -> float:
+        """Return the height."""
+        return self.height
+
+    def set_height(self, height: float) -> None:
+        """Set the height."""
+        self.height = _ensure_number(height, "height")
+        if self.height < 0:
+            raise ValueError("height must be non-negative")
+
+    def get_color(self) -> tuple[int, int, int]:
+        """Return the color."""
+        return self.color
+
+    def set_color(self, color: tuple[int, int, int]) -> None:
+        """Set the color."""
+        self.color = _ensure_color(color)
+
+    def get_alpha(self) -> int:
+        """Return the alpha value."""
+        return self.alpha
+
+    def set_alpha(self, alpha: int) -> None:
+        """Set the alpha value."""
+        self.alpha = _ensure_int(alpha, "alpha", minimum=0)
+        if self.alpha > 255:
+            raise ValueError("alpha must be less than or equal to 255")
+
+    def get_is_mooving(self) -> bool:
+        """Return whether the object is moving."""
+        return self.is_mooving
+
+    def get_friction(self) -> float:
+        """Return the friction."""
+        return self.friction
+
+    def set_friction(self, friction: float) -> None:
+        """Set the friction."""
+        self.friction = _ensure_number(friction, "friction", positive=True)
+
+    def get_move_power(self) -> float:
+        """Return the move power."""
+        return self.move_power
+
+    def set_move_power(self, move_power: float) -> None:
+        """Set the move power."""
+        self.move_power = _ensure_number(
+            move_power, "move_power", positive=True)
+
+    def get_radius(self) -> int:
+        """Return the radius."""
+        return self.radius
+
+    def set_radius(self, radius: int) -> None:
+        """Set the radius."""
+        self.radius = _ensure_int(radius, "radius", minimum=0)
+
+    def get_debug(self) -> bool:
+        """Return whether debug mode is enabled."""
+        return self.debug
+
+    def set_debug(self, debug: bool) -> None:
+        """Set whether debug mode is enabled."""
+        if type(debug) is not bool:
+            raise TypeError("debug must be a bool")
+        self.debug = debug
+
+    def get_alive(self) -> bool:
+        """Return whether the object is alive."""
+        return self.alive
+
+    def set_alive(self, alive: bool) -> None:
+        """Set whether the object is alive."""
+        if type(alive) is not bool:
+            raise TypeError("alive must be a bool")
+        self.alive = alive
 
     def get_pos(self) -> tuple[float, float]:
+        """Return the position."""
         return (self.x, self.y)
 
     def rotate_focus(self, x: float, y: float) -> None:
-        """make the object rotate to face a specific point"""
+        """Rotate toward a point."""
         self.target_z = math.atan2(y - self.center()[1], x - self.center()[0])
 
     def move_rel(self, dx: float, dy: float) -> None:
-        """Update the target to move towards. Velocity is inherited"""
+        """Update the target relative to the current position."""
+        dx = _ensure_number(dx, "dx")
+        dy = _ensure_number(dy, "dy")
         self.is_mooving = True
         self.target_x: float = self.x + dx
         self.target_y: float = self.y + dy
@@ -335,6 +759,8 @@ class Rect:
 
     def move(self, x: float, y: float) -> None:
         """Move to a fixed position."""
+        x = _ensure_number(x, "x")
+        y = _ensure_number(y, "y")
         self.is_mooving = True
         self.target_x: float = x
         self.target_y: float = y
@@ -342,27 +768,33 @@ class Rect:
 
     def tp(self, x: float, y: float) -> None:
         """Teleport to a fixed position."""
-        self.x = x
-        self.y = y
+        self.x = _ensure_number(x, "x")
+        self.y = _ensure_number(y, "y")
 
     def handle_moves(self) -> None:
-        diff_x: float = self.target_x - self.x  # distance
+        """Advance movement physics."""
+        diff_x: float = self.target_x - self.x
         diff_y: float = self.target_y - self.y
-        diff_z: float = (self.target_z - self.z + math.pi) % (
-            2 * math.pi) - math.pi  # shortest angular diatnce
-        self.vel_x += diff_x * 0.05 * self.move_power  # velocity
+        diff_z: float = (
+            (self.target_z - self.z + math.pi) % (2 * math.pi) - math.pi)
+        self.vel_x += diff_x * 0.05 * self.move_power
         self.vel_y += diff_y * 0.05 * self.move_power
         self.vel_z += diff_z * 0.05 * self.move_power
-        self.vel_x *= self.friction  # friction (limit wobble)
+        self.vel_x *= self.friction
         self.vel_y *= self.friction
         self.vel_z *= self.friction
-        self.x += self.vel_x  # update position
+        self.x += self.vel_x
         self.y += self.vel_y
         self.rotate(self.z + self.vel_z)
 
-        # Snap when movement finished
-        if (abs(diff_x) < 0.5 and abs(diff_y) < 0.5 and abs(diff_z) < 0.5 and
-                abs(self.vel_x) < 0.5 and abs(self.vel_y) < 0.5 and abs(self.vel_z) < 0.5):
+        if (
+            abs(diff_x) < 0.5
+            and abs(diff_y) < 0.5
+            and abs(diff_z) < 0.5
+            and abs(self.vel_x) < 0.5
+            and abs(self.vel_y) < 0.5
+            and abs(self.vel_z) < 0.5
+        ):
             self.x = self.target_x
             self.y = self.target_y
             self.z = self.target_z
@@ -370,40 +802,54 @@ class Rect:
             self.is_mooving = False
 
     def draw(self, window: 'Window') -> None:
+        """Draw the rectangle."""
         if not self.alive:
             return
         if self.is_mooving:
             self.handle_moves()
 
         z = window.get_zoom()
-        
-        if (self._last_zoom != z or self._last_z != self.z or
-            self._last_width != self.width or self._last_height != self.height or
-            self._last_radius != self.radius or self._last_color != self.color or
-            self._last_alpha != self.alpha or self._last_debug != self.debug or
-            self._cached_rect_image is None):
-            
+
+        if (
+            self._last_zoom != z or self._last_z != self.z
+            or self._last_width != self.width
+            or self._last_height != self.height
+            or self._last_radius != self.radius
+            or self._last_color != self.color
+            or self._last_alpha != self.alpha
+            or self._last_debug != self.debug
+            or self._cached_rect_image is None
+        ):
             sw = int(self.width * z)
             sh = int(self.height * z)
             if sw > 0 and sh > 0:
                 scaled_rect = pygame.Surface((sw, sh), pygame.SRCALPHA)
+                rgba_color = (
+                    self.color[0],
+                    self.color[1],
+                    self.color[2],
+                    self.alpha,
+                )
                 if self.radius:
                     pygame.draw.rect(scaled_rect,
-                                     (self.color[0], self.color[1], self.color[2], self.alpha),
+                                     rgba_color,
                                      (0, 0, sw, sh),
                                      border_radius=int(self.radius * z))
                 else:
-                    scaled_rect.fill((self.color[0], self.color[1], self.color[2], self.alpha))
-                    
+                    scaled_rect.fill(rgba_color)
+
                 if self.debug and self.alive:
-                    scaled_debug = pygame.transform.scale(self.debug_img, (sw, sh))
+                    scaled_debug = pygame.transform.scale(
+                        self.debug_img, (sw, sh))
                     scaled_rect.blit(scaled_debug, (0, 0))
-                    
+
                 self._cached_rect_image = pygame.transform.rotate(
-                    scaled_rect, (self.z * -57.2958) - 90)  # Convert radians to deg
+                    scaled_rect,
+                    (self.z * -57.2958) - 90,
+                )
             else:
                 self._cached_rect_image = None
-                
+
             self._last_zoom = z
             self._last_z = self.z
             self._last_width = self.width
@@ -415,18 +861,26 @@ class Rect:
 
         if self._cached_rect_image:
             sx, sy = window.world_to_screen((self.x, self.y))
-            new_rect: pygame.Rect = self._cached_rect_image.get_rect(center=(sx, sy))
+            new_rect: pygame.Rect = self._cached_rect_image.get_rect(
+                center=(sx, sy))
             window.screen.blit(self._cached_rect_image, new_rect.topleft)
-            
+
         if self.debug and self.alive:
             sx, sy = window.world_to_screen((self.x, self.y))
             stx, sty = window.world_to_screen((self.target_x, self.target_y))
-            pygame.draw.line(window.screen, (255, 255, 255), (sx, sy), (stx, sty))
+            pygame.draw.line(
+                window.screen,
+                (255, 255, 255),
+                (sx, sy),
+                (stx, sty),
+            )
 
     def kill(self) -> None:
+        """Disable the rectangle."""
         self.alive = False
 
     def god_touch(self) -> None:
+        """Re-enable the rectangle."""
         self.alive = True
 
 
@@ -439,11 +893,15 @@ class Drone(Rect):
                  debug: bool,
                  cooldown: float = .5,
                  image_path: str = "assets/drone2.png") -> None:
+        """Create a drone."""
         super().__init__(x, y, 50, 50, alpha=255, debug=debug)
         self.friction = .9
         self.move_power = 0.1
         self.wander_margin: float = .8
-        self.moove_cooldown: float = cooldown
+        self.moove_cooldown: float = _ensure_number(
+            cooldown, "cooldown")
+        if self.moove_cooldown < 0:
+            raise ValueError("cooldown must be non-negative")
         self.last_mooved: float = 0
         self.scale: float = 3.0
         self.image_path: str = image_path
@@ -461,33 +919,17 @@ class Drone(Rect):
                     pygame.transform.rotate(base_img, angle)
 
     def move(self, x: float, y: float) -> None:
+        """Move the drone and refresh its cooldown."""
         self.last_mooved = pygame.time.get_ticks() / 1000
         return super().move(x, y)
 
     def handle_collisions(
             self,
-            all_drones: list["Drone"],
-            window_width: int,
-            window_height: int) -> None:
+            all_drones: list["Drone"]) -> None:
+        """Apply drone collision forces."""
         if not self.alive:
             return
         hitbox_radius: float = 100  # Safe distance between drones
-
-        # Border collision
-        border_radius: float = hitbox_radius / 2.0
-        if self.x < border_radius:
-            self.vel_x += (border_radius - self.x) * 0.2
-            self.is_mooving = True
-        elif self.x > window_width - border_radius:
-            self.vel_x -= (self.x - (window_width - border_radius)) * 0.2
-            self.is_mooving = True
-
-        if self.y < border_radius:
-            self.vel_y += (border_radius - self.y) * 0.2
-            self.is_mooving = True
-        elif self.y > window_height - border_radius:
-            self.vel_y -= (self.y - (window_height - border_radius)) * 0.2
-            self.is_mooving = True
 
         for other in all_drones:  # collision with other
             if other is self:
@@ -513,18 +955,22 @@ class Drone(Rect):
                 other.is_mooving = True
 
     def wander(self, window: Window) -> None:
+        """Send the drone to a random target."""
         if not self.alive:
             return
-        if pygame.time.get_ticks() / 1000 - \
-                self.last_mooved > self.moove_cooldown:
-            # find a random position and go to it
+        if (
+            pygame.time.get_ticks() / 1000 - self.last_mooved
+            > self.moove_cooldown
+        ):
             self.move(
-                (random.random() * self.wander_margin * window.width + (
-                    window.width * (1-self.wander_margin)) / 2),
-                (random.random() * self.wander_margin * window.height + (
-                    window.height * (1-self.wander_margin)) / 2))
+                random.random() * self.wander_margin * window.width + (
+                    window.width * (1 - self.wander_margin)) / 2,
+                random.random() * self.wander_margin * window.height + (
+                    window.height * (1 - self.wander_margin)) / 2,
+            )
 
     def draw(self, window: 'Window') -> None:
+        """Draw the drone."""
         if not self.alive:
             return
         if self.is_mooving:
@@ -533,56 +979,74 @@ class Drone(Rect):
         degrees: int = int((self.z * -57.2958) - 90) % 360
         z = window.get_zoom()
 
-        if (not hasattr(self, '_last_z_deg') or self._last_z_deg != degrees or 
-            not hasattr(self, '_last_zoom') or self._last_zoom != z or 
-            not hasattr(self, '_cached_drone_img') or self._cached_drone_img is None):
-
-            # Fetch the pre-rotated image directly from cache in O(1) time
+        if (
+            not hasattr(self, '_last_z_deg')
+            or self._last_z_deg != degrees
+            or not hasattr(self, '_last_zoom')
+            or self._last_zoom != z
+            or not hasattr(self, '_cached_drone_img')
+            or self._cached_drone_img is None
+        ):
             self.rotated_img = Drone._rotation_cache[self.image_path][degrees]
 
             sw = int(self.rotated_img.get_width() * z)
             sh = int(self.rotated_img.get_height() * z)
-            
+
             if sw > 0 and sh > 0:
-                self._cached_drone_img = pygame.transform.scale(self.rotated_img, (sw, sh))
+                self._cached_drone_img = pygame.transform.scale(
+                    self.rotated_img, (sw, sh))
             else:
                 self._cached_drone_img = None
 
             self._last_z_deg = degrees
             self._last_zoom = z
-            
+
         if hasattr(self, '_cached_drone_img') and self._cached_drone_img:
             sx, sy = window.world_to_screen((self.x, self.y))
-            new_rect: pygame.Rect = self._cached_drone_img.get_rect(center=(sx, sy))
+            new_rect: pygame.Rect = self._cached_drone_img.get_rect(
+                center=(sx, sy))
             window.screen.blit(self._cached_drone_img, new_rect.topleft)
 
         if self.debug and self.alive:
             sx, sy = window.world_to_screen((self.x, self.y))
             stx, sty = window.world_to_screen((self.target_x, self.target_y))
-            pygame.draw.line(window.screen, (255, 255, 255), (sx, sy), (stx, sty))
+            pygame.draw.line(
+                window.screen,
+                (255, 255, 255),
+                (sx, sy),
+                (stx, sty),
+            )
 
 
 if __name__ == "__main__":
     window = Window()
     running = True
     stick = False
-    objects: list[any] = [
-        Drone(100, 100, debug=True, image_path="assets/drone.png")]
-    objects.append(ImageObject(
-        "assets/logo.png", window.width/2, 100, scale=1))
-    objects.append(Rect(30, 30, 0, 0, radius=0, color=(255, 255, 255)))
+    lead_drone: Drone = Drone(
+        100, 100, debug=True, image_path="assets/drone.png")
+    logo: ImageObject = ImageObject(
+        "assets/logo.png", window.width / 2, 100, scale=1)
+    marker: Rect = Rect(30, 30, 0, 0, radius=0, color=(255, 255, 255))
     drones: list[Drone] = [Drone(
         300, 300, debug=True, cooldown=random.uniform(0.1, 2.0),
         image_path="assets/drone2.png"
         ) for _ in range(10)]
     fps = Text(10, 10, 24, "FPS: 0")
     spawn_button = Button(100, 100, 200, 50, "Spawn Drones", 5)
+
     def spawn_more_drones():
+        """Spawn a batch of drones."""
         drones.extend([Drone(
             300, 300, debug=True, cooldown=random.uniform(0.1, 2.0)
         ) for _ in range(10)])
+
     spawn_button.hook = spawn_more_drones
-    objects.append(spawn_button)
+    objects: list[Rect | ImageObject | Button] = [
+        lead_drone,
+        logo,
+        marker,
+        spawn_button,
+    ]
     drones_count = Text(10, 40, 24, f"Drones: {len(drones)}")
     pan_active = False
     while running:
@@ -593,13 +1057,13 @@ if __name__ == "__main__":
                 if event.key == pygame.K_p:
                     stick: bool = not stick
                 if event.key == pygame.K_d:
-                    objects[0].debug = not objects[0].debug
-                    if objects[0].debug:
-                        objects[0].color = (255, 255, 255)
-                        objects[0].alpha = 0
+                    lead_drone.debug = not lead_drone.debug
+                    if lead_drone.debug:
+                        lead_drone.color = (255, 255, 255)
+                        lead_drone.alpha = 0
                     else:
-                        objects[0].color = (50, 150, 70)
-                        objects[0].alpha = 255
+                        lead_drone.color = (50, 150, 70)
+                        lead_drone.alpha = 255
             if event.type == pygame.MOUSEWHEEL:
                 mouse_x, mouse_y = pygame.mouse.get_pos()
                 world_x, world_y = window.screen_to_world((mouse_x, mouse_y))
@@ -616,14 +1080,14 @@ if __name__ == "__main__":
                     pan_active = True
                 if event.button == 1:  # Left mouse button
                     world_pos = window.screen_to_world(event.pos)
-                    if isinstance(objects[3], Button) and objects[3].is_hovered(world_pos):
-                        objects[3].click(world_pos)
+                    if spawn_button.is_hovered(world_pos):
+                        spawn_button.click(world_pos)
                     else:
-                        objects[0].move(world_pos[0], world_pos[1])
-                        objects[2].radius = 15
-                        objects[2].width = 30
-                        objects[2].height = 30
-                        objects[2].tp(world_pos[0], world_pos[1])
+                        lead_drone.move(world_pos[0], world_pos[1])
+                        marker.radius = 15
+                        marker.width = 30
+                        marker.height = 30
+                        marker.tp(world_pos[0], world_pos[1])
             if event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 2:
                     pan_active = False
@@ -632,10 +1096,10 @@ if __name__ == "__main__":
                     window.pan(event.rel[0], event.rel[1])
             if stick:
                 world_pos = window.screen_to_world(pygame.mouse.get_pos())
-                objects[0].move(world_pos[0], world_pos[1])
-        all_game_drones = [objects[0]] + drones
+                lead_drone.move(world_pos[0], world_pos[1])
+        all_game_drones = [lead_drone] + drones
         for d in all_game_drones:
-            d.handle_collisions(all_game_drones, window.width, window.height)
+            d.handle_collisions(all_game_drones)
 
         window.draw_background()
 
@@ -645,14 +1109,17 @@ if __name__ == "__main__":
             obj.draw(window)
         for drone in drones:
             drone.draw(window)
-            if pygame.time.get_ticks() / 1000 - drone.last_mooved > drone.moove_cooldown + 2:
+            if (
+                pygame.time.get_ticks() / 1000 - drone.last_mooved
+                > drone.moove_cooldown + 2
+            ):
                 drone.wander(window)
-        objects[1].dummy += 0.05
-        objects[1].rotation = math.sin(objects[1].dummy) * 20
-        if objects[2].radius > 0:
-            objects[2].radius -= 1
-            objects[2].width -= 2
-            objects[2].height -= 2
+        logo.dummy += 0.05
+        logo.rotation = math.sin(logo.dummy) * 20
+        if marker.radius > 0:
+            marker.radius -= 1
+            marker.width -= 2
+            marker.height -= 2
 
         fps.set_text(f"FPS: {window.get_fps()}")
         drones_count.set_text(f"Drones: {len(drones)}")
