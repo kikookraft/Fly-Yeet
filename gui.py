@@ -1,12 +1,19 @@
 import os
 import random
-from typing import Callable, Dict
+from typing import Any, Callable, Dict, Protocol
 
 import pygame
 import math
 
 pygame.init()
 CELLS = 50
+
+
+class _Drawable(Protocol):
+    """Protocol for objects that can be drawn by the renderer."""
+
+    def draw(self, *args: Any, **kwargs: Any) -> None:
+        """Draw the object using the provided window."""
 
 
 def bezier(x: float) -> float:
@@ -203,12 +210,16 @@ class Window:
 
 
 class Text:
-    def __init__(self,
-                 x: float = 0,
-                 y: float = 0,
-                 size: int = 36,
-                 text: str = "",
-                 color: tuple[int, int, int] = (255, 255, 255)) -> None:
+    def __init__(
+            self,
+            x: float = 0,
+            y: float = 0,
+            size: int = 36,
+            text: str = "",
+            color: tuple[int, int, int] = (255, 255, 255),
+            centered: bool = False,
+            lock_to_screen: bool = True,
+    ) -> None:
         """Create a text label."""
         self.x: float = _ensure_number(x, "x")
         self.y: float = _ensure_number(y, "y")
@@ -218,10 +229,19 @@ class Text:
         self.font: pygame.font.Font = pygame.font.SysFont(None, self.size)
         self.text_surface: pygame.Surface = self.font.render(
             self.text, True, self.color)
+        self.centered: bool = centered
+        # When True the text is drawn in screen-space (HUD).
+        # When False the text follows world coordinates (affected by pan/zoom).
+        self.lock_to_screen: bool = bool(lock_to_screen)
 
     def draw(self, screen: pygame.Surface) -> None:
         """Draw the text label."""
-        screen.blit(self.text_surface, (self.x, self.y))
+        if self.centered:
+            text_rect = self.text_surface.get_rect()
+            text_rect.center = (int(self.x), int(self.y))
+            screen.blit(self.text_surface, text_rect)
+        else:
+            screen.blit(self.text_surface, (self.x, self.y))
 
     def set_text(self, text: str) -> None:
         """Set the text content."""
@@ -1028,6 +1048,93 @@ class Drone(Rect):
                 (sx, sy),
                 (stx, sty),
             )
+
+
+class LayeredRenderer:
+    """Simple layered renderer/scene manager.
+
+    Objects are drawn in ascending layer order (lower first).
+    Any object placed in layers must implement a `draw(window)` method.
+    For menu background behavior, `update(window)` will call simple
+    helpers on objects: `handle_collisions(all_drones)` and `wander(window)`
+    when Drone instances are present.
+    """
+
+    def __init__(self) -> None:
+        self._layers: dict[int, list[_Drawable]] = {}
+
+    def add(self, obj: _Drawable, layer: int = 0) -> None:
+        """Add an object to a given layer."""
+        if type(layer) is not int:
+            raise TypeError("layer must be an int")
+        self._layers.setdefault(layer, []).append(obj)
+
+    def remove(self, obj: _Drawable) -> None:
+        """Remove object from any layer where it exists."""
+        for lst in self._layers.values():
+            if obj in lst:
+                lst.remove(obj)
+
+    def clear_layer(self, layer: int) -> None:
+        """Clear all objects from a specific layer."""
+        if layer in self._layers:
+            self._layers[layer].clear()
+
+    def draw(self, window: Window) -> None:
+        """Draw all layers in ascending order."""
+        for layer in sorted(self._layers.keys()):
+            for obj in list(self._layers[layer]):
+                try:
+                    # Text.draw expects a Surface; others expect Window
+                    if isinstance(obj, Text):
+                        if getattr(obj, "lock_to_screen", True):
+                            obj.draw(window.get_screen())
+                        else:
+                            # draw text at world position transformed to screen
+                            old_x, old_y = obj.x, obj.y
+                            old_size = obj.size
+                            sx, sy = window.world_to_screen((old_x, old_y))
+                            zoomed_size = max(
+                                1,
+                                int(old_size * window.get_zoom()),
+                            )
+                            obj.set_size(zoomed_size)
+                            obj.x, obj.y = sx, sy
+                            obj.draw(window.get_screen())
+                            obj.set_size(old_size)
+                            obj.x, obj.y = old_x, old_y
+                    else:
+                        obj.draw(window)
+                except Exception:
+                    # keep rendering even if one object fails
+                    continue
+
+    def update(self, window: Window) -> None:
+        """Perform simple per-frame updates for scene objects.
+
+        - Handle drone collisions among all Drone instances.
+        - Call `wander(window)` on drones when idle.
+        """
+        # gather drones
+        all_drones: list[Drone] = []
+        for lst in self._layers.values():
+            for obj in lst:
+                if isinstance(obj, Drone):
+                    all_drones.append(obj)
+
+        # collisions
+        for d in all_drones:
+            try:
+                d.handle_collisions(all_drones)
+            except Exception:
+                pass
+
+        # wandering
+        for d in all_drones:
+            try:
+                d.wander(window)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 .PHONY: install run debug clean lint lint-strict
 
 run: install
-	uv run python gui.py
+	uv run python main.py
 
 install:
 	uv venv --clear
