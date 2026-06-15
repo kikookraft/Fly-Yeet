@@ -1094,11 +1094,15 @@ class Hub_gui(Rect):
         elif self.zone_type == "priority":
             img_path = "assets/plus.png"
         self.image: ImageObject = ImageObject(
-            img_path, self.x, self.y, scale=self.size * 0.9,
-            absolute_size=False)
+            img_path, self.x, self.y, scale=self.size * 0.5,
+            absolute_size=True)
+        self._base_img_scale: float = self.size * 0.5
 
     def draw(self, window: Window) -> None:
         super().draw(window)
+        # Make the icon scale with zoom (absolute_size mode uses scale
+        # as a pixel size, so multiply base scale by current zoom)
+        self.image.scale = self._base_img_scale * window.get_zoom()
         self.image.draw(window)
 
 
@@ -1114,7 +1118,7 @@ class Connection_gui:
         hub_a: "Hub_gui",
         hub_b: "Hub_gui",
         max_link_capacity: int = 1,
-        color: tuple[int, int, int] = (100, 100, 100),
+        color: tuple[int, int, int] = (200, 150, 0),
     ) -> None:
         """Create a connection line.
 
@@ -1128,6 +1132,7 @@ class Connection_gui:
         self.hub_b: Hub_gui = hub_b
         self.max_link_capacity: int = max_link_capacity
         self.color: tuple[int, int, int] = _ensure_color(color)
+        self.color_from_capacity()  # Set color based on capacity
 
     def draw(self, window: Window) -> None:
         """Draw the line between the two hubs on *window*."""
@@ -1135,7 +1140,7 @@ class Connection_gui:
         sax, say = window.world_to_screen((self.hub_a.x, self.hub_a.y))
         sbx, sby = window.world_to_screen((self.hub_b.x, self.hub_b.y))
 
-        line_w: int = max(1, int(self.max_link_capacity * 2
+        line_w: int = max(5, int(self.max_link_capacity * 30
                                  * window.get_zoom()))
         # Draw directly on screen — simple, no offset issues
         pygame.draw.line(
@@ -1143,6 +1148,15 @@ class Connection_gui:
             (sax, say), (sbx, sby),
             line_w,
         )
+
+    def color_from_capacity(self) -> None:
+        """Set the line color based on a capacity value."""
+        if self.max_link_capacity <= 1:
+            self.color = (200, 150, 0)  # Green for medium capacity
+        elif self.max_link_capacity <= 2:
+            self.color = (150, 200, 0)  # Dark green for high capacity
+        else:
+            self.color = (100, 250, 0)  # Bright green for very high capacity
 
 
 class Map_gui:
