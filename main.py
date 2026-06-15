@@ -161,6 +161,10 @@ class App:
         self._clear_menu_layers()
         self._build_background()
 
+        # Reset view
+        self.window.set_zoom(1.0)
+        self.window.set_offset(0, 0)
+
         self.logo = gui.ImageObject(
             "assets/logo.png",
             self.window.width / 2,
@@ -241,6 +245,10 @@ class App:
         self._clear_menu_layers()
         self._build_background()
 
+        # Reset view
+        self.window.set_zoom(1.0)
+        self.window.set_offset(0, 0)
+
         title = gui.Text(
             self.window.width / 2,
             180,
@@ -309,6 +317,9 @@ class App:
             for hub_obj in self._map_gui.hubs.values():
                 self.renderer.add(hub_obj, layer=LAYER_HUBS)
 
+            # Center the map in the view
+            self._center_map_view()
+
             # Show map name as overlay
             label = gui.Text(
                 self.window.width // 2,
@@ -331,6 +342,11 @@ class App:
             )
             self.renderer.add(err_text, layer=LAYER_MENU)
 
+    def _center_map_view(self) -> None:
+        """Set zoom and offset so the current map fits centred on screen."""
+        if self._map_gui is not None:
+            _center_view(self.window, self._map_gui)
+
     def _handle_menu_escape(self) -> None:
         if self.menu_level == "root":
             self.running = False
@@ -351,8 +367,11 @@ class App:
                         else:
                             self._handle_menu_escape()
                     if event.key == pygame.K_SPACE:
-                        self.window.set_zoom(1.0)
-                        self.window.set_offset(0, 0)
+                        if self.state == "map":
+                            self._center_map_view()
+                        else:
+                            self.window.set_zoom(1.0)
+                            self.window.set_offset(0, 0)
                 if event.type == pygame.MOUSEWHEEL:
                     mouse_x, mouse_y = pygame.mouse.get_pos()
                     world_x, world_y = self.window.screen_to_world(
@@ -417,6 +436,37 @@ class App:
 # Direct test mode:  python main.py <map_file>
 # ---------------------------------------------------------------------------
 
+def _center_view(window: gui.Window, map_gui_obj: gui.Map_gui) -> None:
+    """Set *window* zoom and offset so *map_gui_obj* fits centred."""
+    hubs = list(map_gui_obj.hubs.values())
+    if not hubs:
+        return
+
+    min_x: float = min(h.x for h in hubs)
+    max_x: float = max(h.x for h in hubs)
+    min_y: float = min(h.y for h in hubs)
+    max_y: float = max(h.y for h in hubs)
+
+    cx: float = (min_x + max_x) / 2.0
+    cy: float = (min_y + max_y) / 2.0
+    hub_size: float = float(hubs[0].size)
+
+    world_w: float = (max_x - min_x) + hub_size * 2
+    world_h: float = (max_y - min_y) + hub_size * 2
+
+    margin: float = 0.85
+    zoom_x: float = window.width / max(world_w, 1) * margin
+    zoom_y: float = window.height / max(world_h, 1) * margin
+    zoom: float = min(zoom_x, zoom_y)
+    zoom = max(0.34, min(2.0, zoom))
+
+    offset_x: float = window.width / 2.0 - cx * zoom
+    offset_y: float = window.height / 2.0 - cy * zoom
+
+    window.set_zoom(zoom)
+    window.set_offset(offset_x, offset_y)
+
+
 def _quick_view(map_path: str) -> None:
     """Bypass the menu and render a single map directly."""
     window = gui.Window()
@@ -430,6 +480,9 @@ def _quick_view(map_path: str) -> None:
         renderer.add(conn, layer=LAYER_CONNECTIONS)
     for hub_obj in map_gui_obj.hubs.values():
         renderer.add(hub_obj, layer=LAYER_HUBS)
+
+    # Center the view
+    _center_view(window, map_gui_obj)
 
     title = gui.Text(
         window.width // 2, 30, 32,
@@ -456,8 +509,7 @@ def _quick_view(map_path: str) -> None:
                 if event.key in (pygame.K_ESCAPE, pygame.K_q):
                     running = False
                 if event.key == pygame.K_SPACE:
-                    window.set_zoom(1.0)
-                    window.set_offset(0, 0)
+                    _center_view(window, map_gui_obj)
             if event.type == pygame.MOUSEWHEEL:
                 mx, my = pygame.mouse.get_pos()
                 wx, wy = window.screen_to_world((mx, my))
