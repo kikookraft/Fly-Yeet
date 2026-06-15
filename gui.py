@@ -535,7 +535,8 @@ class ImageObject:
                  image_path: str,
                  x: float,
                  y: float,
-                 scale: float = 1) -> None:
+                 scale: float = 1,
+                 absolute_size: bool = False) -> None:
         """Create an image object."""
         self.image_path: str = _ensure_image_path(image_path)
         self.image: pygame.Surface = pygame.image.load(
@@ -543,6 +544,7 @@ class ImageObject:
         self.x: float = _ensure_number(x, "x")
         self.y: float = _ensure_number(y, "y")
         self.scale: float = _ensure_number(scale, "scale", positive=True)
+        self.absolute_size: bool = absolute_size
         self.rotation: float = 0
         self.dummy: float = 0
         self._last_rotation: float | None = None
@@ -557,8 +559,12 @@ class ImageObject:
                 or self._cached_image is None):
             rotated_image: pygame.Surface = pygame.transform.rotate(
                 self.image, self.rotation)
-            w = int(rotated_image.get_width() * self.scale * z)
-            h = int(rotated_image.get_height() * self.scale * z)
+            if not self.absolute_size:
+                w = int(rotated_image.get_width() * self.scale * z)
+                h = int(rotated_image.get_height() * self.scale * z)
+            else:
+                w = self.scale
+                h = self.scale
             if w > 0 and h > 0:
                 self._cached_image = pygame.transform.scale(
                     rotated_image, (w, h)
@@ -1045,6 +1051,59 @@ class Drone(Rect):
                 (sx, sy),
                 (stx, sty),
             )
+
+
+class Hub_gui(Rect):
+    def __init__(
+            self,
+            x: int,
+            y: int,
+            name: str,
+            color: tuple[int, int, int],
+            max_drones: int,
+            zone_type: str,
+            is_start: bool,
+            is_end: bool
+            ) -> None:
+        """Create a hub."""
+        self.name: str = name
+        self.max_drones: int = max_drones
+        self.zone_type: str = zone_type
+        self.is_start: bool = is_start
+        self.is_end: bool = is_end
+        self.color: tuple[int, int, int] = color
+        self.margin: int = 50
+        self.size: int = 100
+        self.x: float = x * (self.size + self.margin)
+        self.y: float = y * (self.size + self.margin)
+        super().__init__(self.x, self.y,
+                         self.size, self.size,
+                         radius=self.size//2, color=color)
+        self.init_image()
+
+    def init_image(self) -> None:
+        """Initialize the hub image."""
+        if self.is_start:
+            img_path = "assets/home.png"
+        elif self.is_end:
+            img_path = "assets/point.png"
+        else:
+            img_path = "assets/circle.png"
+        if self.zone_type == "restricted":
+            img_path = "assets/warning.png"
+        elif self.zone_type == "priority":
+            img_path = "assets/plus.png"
+        self.image: ImageObject = ImageObject(
+            img_path, self.x, self.y, scale=self.size * 0.9,
+            absolute_size=True)
+
+    def draw(self, window: Window) -> None:
+        super().draw(window)
+        self.image.draw(window)
+
+
+class Map_gui():
+    pass
 
 
 class LayeredRenderer:
