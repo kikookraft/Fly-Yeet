@@ -8,7 +8,7 @@ install:
 	uv pip install pygame flake8 mypy
 
 debug:
-	uv run python -m pdb gui.py
+	uv run python -m pdb main.py
 
 clean:
 	rm -rf __pycache__
