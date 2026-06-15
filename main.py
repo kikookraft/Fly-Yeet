@@ -2,7 +2,14 @@
 
 This creates a simple menu mode (with placeholders) and a map mode stub.
 It uses the LayeredRenderer from `gui.py` to manage draw order.
+
+Direct test mode:
+    python main.py maps/easy/01_linear_path.txt
 """
+from __future__ import annotations
+
+import os
+import sys
 from typing import Callable, Optional
 
 import math
@@ -11,7 +18,79 @@ import random
 import pygame
 
 import gui
+import parser
 
+
+# ---------------------------------------------------------------------------
+# Layer constants (draw order: lower number = behind)
+# ---------------------------------------------------------------------------
+
+LAYER_BG: int = 0           # tiled background / ambient drones
+LAYER_CONNECTIONS: int = 1  # connection lines between hubs
+LAYER_HUBS: int = 2         # hub circles + icons
+LAYER_MISC: int = 3         # info popups / tooltips (future)
+LAYER_DRONES: int = 4       # simulation drones
+LAYER_MENU: int = 5         # buttons, HUD, overlays
+
+
+# ---------------------------------------------------------------------------
+# Helper: parse → GUI conversion
+# ---------------------------------------------------------------------------
+
+# Map (difficulty, index) → disk filename
+_MAP_INDEX: dict[tuple[str, int], str] = {
+    ("easy", 1): "01_linear_path.txt",
+    ("easy", 2): "02_simple_fork.txt",
+    ("easy", 3): "03_basic_capacity.txt",
+    ("medium", 1): "01_dead_end_trap.txt",
+    ("medium", 2): "02_circular_loop.txt",
+    ("medium", 3): "03_priority_puzzle.txt",
+    ("hard", 1): "01_maze_nightmare.txt",
+    ("hard", 2): "02_capacity_hell.txt",
+    ("hard", 3): "03_ultimate_challenge.txt",
+}
+
+
+def build_map_gui(map_data: parser.Map) -> gui.Map_gui:
+    """Convert a parsed :class:`parser.Map` into renderable GUI objects.
+
+    Creates :class:`gui.Hub_gui` for every hub and
+    :class:`gui.Connection_gui` for every connection, wiring them together.
+    """
+    map_gui = gui.Map_gui()
+
+    # 1. Create all hubs
+    for hub in map_data.all_hubs:
+        hub_gui_obj = gui.Hub_gui(
+            x=hub.position.x,
+            y=hub.position.y,
+            name=hub.name,
+            color=hub.color.rgb_tuple,
+            max_drones=hub.max_drones,
+            zone_type=hub.zone_type.value,
+            is_start=hub.is_start,
+            is_end=hub.is_end,
+        )
+        map_gui.add_hub(hub_gui_obj)
+
+    # 2. Create connections (wire hub references)
+    for conn in map_data.connections:
+        hub_a = map_gui.hubs.get(conn.from_hub)
+        hub_b = map_gui.hubs.get(conn.to_hub)
+        if hub_a is not None and hub_b is not None:
+            conn_gui = gui.Connection_gui(
+                hub_a=hub_a,
+                hub_b=hub_b,
+                max_link_capacity=conn.max_link_capacity,
+            )
+            map_gui.add_connection(conn_gui)
+
+    return map_gui
+
+
+# ---------------------------------------------------------------------------
+# App
+# ---------------------------------------------------------------------------
 
 class App:
     def __init__(self) -> None:
@@ -26,6 +105,7 @@ class App:
         self.logo_phase: float = 0.0
 
         self.interactives: list[gui.Button] = []
+        self._map_gui: Optional[gui.Map_gui] = None
         self._build_root_menu()
 
         self.fps = gui.Text(10, 10, 24, "FPS: 0")
@@ -35,6 +115,8 @@ class App:
         self.renderer.clear_layer(1)
         self.renderer.clear_layer(2)
         self.renderer.clear_layer(3)
+        self.renderer.clear_layer(4)
+        self.renderer.clear_layer(5)
         self.interactives = []
 
     def _register_button(
@@ -174,11 +256,13 @@ class App:
         spacing = 90
 
         def make_map_button(index: int) -> gui.Button:
-            map_name = f"{difficulty}_map_{index}"
+            filename: str = _MAP_INDEX.get((difficulty, index), "")
+            map_path: str = os.path.join("maps", difficulty, filename)
 
             def select_map() -> None:
-                self.selected_map = map_name
+                self.selected_map = map_path
                 self.state = "map"
+                self._enter_map_mode(map_path)
 
             button = gui.Button(
                 center_x,
@@ -207,6 +291,45 @@ class App:
         )
         back_button.set_hook(go_back)
         self._register_button(back_button)
+
+    def _enter_map_mode(self, map_path: str) -> None:
+        """Parse *map_path* and populate the renderer with the map."""
+        # Clear previous map layers and menu artefacts
+        self.renderer.clear_layer(LAYER_BG)
+        self.renderer.clear_layer(LAYER_CONNECTIONS)
+        self.renderer.clear_layer(LAYER_HUBS)
+        self._clear_menu_layers()
+
+        try:
+            parsed = parser.parse_map_file(map_path)
+            self._map_gui = build_map_gui(parsed)
+            # Add connections (lines behind) and hubs on dedicated layers
+            for conn in self._map_gui.connections:
+                self.renderer.add(conn, layer=LAYER_CONNECTIONS)
+            for hub_obj in self._map_gui.hubs.values():
+                self.renderer.add(hub_obj, layer=LAYER_HUBS)
+
+            # Show map name as overlay
+            label = gui.Text(
+                self.window.width // 2,
+                30,
+                32,
+                os.path.basename(map_path),
+                centered=True,
+                lock_to_screen=True,
+            )
+            self.renderer.add(label, layer=LAYER_MENU)
+        except (ValueError, FileNotFoundError) as exc:
+            err_text = gui.Text(
+                self.window.width // 2,
+                self.window.height // 2,
+                28,
+                f"Error: {exc}",
+                color=(255, 80, 80),
+                centered=True,
+                lock_to_screen=True,
+            )
+            self.renderer.add(err_text, layer=LAYER_MENU)
 
     def _handle_menu_escape(self) -> None:
         if self.menu_level == "root":
@@ -287,18 +410,86 @@ class App:
                 )
             self.state_text.draw(self.window.get_screen())
 
-            if self.state == "map":
-                placeholder = gui.Text(
-                    self.window.width / 2 - 240,
-                    self.window.height - 120,
-                    28,
-                    f"Map mode: {self.selected_map} (placeholder)",
-                )
-                placeholder.draw(self.window.get_screen())
-
             self.window.update()
 
 
+# ---------------------------------------------------------------------------
+# Direct test mode:  python main.py <map_file>
+# ---------------------------------------------------------------------------
+
+def _quick_view(map_path: str) -> None:
+    """Bypass the menu and render a single map directly."""
+    window = gui.Window()
+    renderer = gui.LayeredRenderer()
+
+    # Parse and build
+    parsed = parser.parse_map_file(map_path)
+    map_gui_obj = build_map_gui(parsed)
+
+    for conn in map_gui_obj.connections:
+        renderer.add(conn, layer=LAYER_CONNECTIONS)
+    for hub_obj in map_gui_obj.hubs.values():
+        renderer.add(hub_obj, layer=LAYER_HUBS)
+
+    title = gui.Text(
+        window.width // 2, 30, 32,
+        os.path.basename(map_path),
+        centered=True,
+    )
+    hint = gui.Text(
+        window.width // 2, window.height - 50, 24,
+        "ESC / Q = quit  |  scroll = zoom  |  middle-drag = pan  |  SPACE = reset view",
+        centered=True,
+    )
+    renderer.add(title, layer=LAYER_MENU)
+    renderer.add(hint, layer=LAYER_MENU)
+
+    fps_text = gui.Text(10, 10, 24, "FPS: 0")
+
+    pan_active = False
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            if event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_ESCAPE, pygame.K_q):
+                    running = False
+                if event.key == pygame.K_SPACE:
+                    window.set_zoom(1.0)
+                    window.set_offset(0, 0)
+            if event.type == pygame.MOUSEWHEEL:
+                mx, my = pygame.mouse.get_pos()
+                wx, wy = window.screen_to_world((mx, my))
+                if event.y > 0:
+                    window.zoom(1.1)
+                elif event.y < 0:
+                    window.zoom(1 / 1.1)
+                window.set_offset(
+                    mx - wx * window.get_zoom(),
+                    my - wy * window.get_zoom(),
+                )
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 2:
+                pan_active = True
+            if event.type == pygame.MOUSEBUTTONUP and event.button == 2:
+                pan_active = False
+            if event.type == pygame.MOUSEMOTION and pan_active:
+                window.pan(event.rel[0], event.rel[1])
+
+        window.draw_background()
+        renderer.draw(window)
+
+        fps_text.set_text(f"FPS: {window.get_fps()}")
+        fps_text.draw(window.get_screen())
+        window.update()
+
+    pygame.quit()
+
+
 if __name__ == "__main__":
-    app = App()
-    app.run()
+    if len(sys.argv) > 1:
+        # Direct test: python main.py <map_file>
+        _quick_view(sys.argv[1])
+    else:
+        App().run()
+        pygame.quit()

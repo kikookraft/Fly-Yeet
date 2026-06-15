@@ -563,8 +563,8 @@ class ImageObject:
                 w = int(rotated_image.get_width() * self.scale * z)
                 h = int(rotated_image.get_height() * self.scale * z)
             else:
-                w = self.scale
-                h = self.scale
+                w = int(self.scale)
+                h = int(self.scale)
             if w > 0 and h > 0:
                 self._cached_image = pygame.transform.scale(
                     rotated_image, (w, h)
@@ -1072,8 +1072,8 @@ class Hub_gui(Rect):
         self.is_start: bool = is_start
         self.is_end: bool = is_end
         self.color: tuple[int, int, int] = color
-        self.margin: int = 50
-        self.size: int = 100
+        self.margin: int = 200
+        self.size: int = 150
         self.x: float = x * (self.size + self.margin)
         self.y: float = y * (self.size + self.margin)
         super().__init__(self.x, self.y,
@@ -1095,15 +1095,81 @@ class Hub_gui(Rect):
             img_path = "assets/plus.png"
         self.image: ImageObject = ImageObject(
             img_path, self.x, self.y, scale=self.size * 0.9,
-            absolute_size=True)
+            absolute_size=False)
 
     def draw(self, window: Window) -> None:
         super().draw(window)
         self.image.draw(window)
 
 
-class Map_gui():
-    pass
+class Connection_gui:
+    """Visual line between two :class:`Hub_gui` objects.
+
+    Stores references to both hubs so the line always tracks their
+    current world positions, respecting zoom and pan.
+    """
+
+    def __init__(
+        self,
+        hub_a: "Hub_gui",
+        hub_b: "Hub_gui",
+        max_link_capacity: int = 1,
+        color: tuple[int, int, int] = (100, 100, 100),
+    ) -> None:
+        """Create a connection line.
+
+        Args:
+            hub_a: First hub reference.
+            hub_b: Second hub reference.
+            max_link_capacity: Capacity value (used for line thickness).
+            color: RGB colour of the line.
+        """
+        self.hub_a: Hub_gui = hub_a
+        self.hub_b: Hub_gui = hub_b
+        self.max_link_capacity: int = max_link_capacity
+        self.color: tuple[int, int, int] = _ensure_color(color)
+
+    def draw(self, window: Window) -> None:
+        """Draw the line between the two hubs on *window*."""
+        # Hub positions are their centres (set in Hub_gui / Rect)
+        sax, say = window.world_to_screen((self.hub_a.x, self.hub_a.y))
+        sbx, sby = window.world_to_screen((self.hub_b.x, self.hub_b.y))
+
+        line_w: int = max(1, int(self.max_link_capacity * 2
+                                 * window.get_zoom()))
+        # Draw directly on screen — simple, no offset issues
+        pygame.draw.line(
+            window.screen, self.color,
+            (sax, say), (sbx, sby),
+            line_w,
+        )
+
+
+class Map_gui:
+    """Container that renders a complete parsed map.
+
+    Holds all :class:`Hub_gui` and :class:`Connection_gui` objects.
+    Drawing order: connections first (lines behind), then hubs on top.
+    """
+
+    def __init__(self) -> None:
+        self.hubs: dict[str, Hub_gui] = {}
+        self.connections: list[Connection_gui] = []
+
+    def add_hub(self, hub: Hub_gui) -> None:
+        """Register a hub GUI object."""
+        self.hubs[hub.name] = hub
+
+    def add_connection(self, conn: Connection_gui) -> None:
+        """Register a connection GUI object."""
+        self.connections.append(conn)
+
+    def draw(self, window: Window) -> None:
+        """Render connections first, then hubs on top."""
+        for conn in self.connections:
+            conn.draw(window)
+        for hub in self.hubs.values():
+            hub.draw(window)
 
 
 class LayeredRenderer:
