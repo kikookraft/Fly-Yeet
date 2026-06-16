@@ -252,7 +252,7 @@ class ParseErrorCollector:
             print(f"{self.RED}{err}{self.RESET}", file=sys.stderr)
 
     def raise_if_any(self) -> None:
-        """Print all errors and raise :class:`ValueError` if any were collected.
+        """Print all errors and raise `ValueError` if any were collected.
 
         The exception message contains every error joined by newlines so
         the GUI can display them individually.
@@ -600,5 +600,6 @@ if __name__ == "__main__":
         # Errors already printed in red by ParseErrorCollector
         sys.exit(1)
     except FileNotFoundError:
-        print(f"\033[91mFile not found: '{sys.argv[1]}'\033[0m", file=sys.stderr)
+        print(f"\033[91mFile not found: ' \
+              {sys.argv[1]}'\033[0m", file=sys.stderr)
         sys.exit(1)

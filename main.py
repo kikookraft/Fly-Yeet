@@ -444,7 +444,7 @@ def _show_error_overlay(
     window: gui.Window,
     error_message: str,
 ) -> None:
-    """Display parser errors as a stacked list of red labels with a backdrop."""
+    """Display parser errors as a list of red labels with a backdrop."""
     error_lines: list[str] = error_message.split("\n")
     line_height: int = 26
     title_height: int = 36
