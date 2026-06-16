@@ -48,6 +48,7 @@ _MAP_INDEX: dict[tuple[str, int], str] = {
     ("hard", 1): "01_maze_nightmare.txt",
     ("hard", 2): "02_capacity_hell.txt",
     ("hard", 3): "03_ultimate_challenge.txt",
+    ("challenger", 1): "01_the_impossible_dream.txt",
 }
 
 
@@ -202,6 +203,9 @@ class App:
         def start_hard() -> None:
             self._build_difficulty_menu("hard")
 
+        def start_challenger() -> None:
+            self._build_difficulty_menu("challenger")
+
         def quit_app() -> None:
             self.running = False
 
@@ -216,7 +220,12 @@ class App:
             "Hard Levels",
             start_hard,
         )
-        self.btn_quit = make_button(start_y + spacing * 3, "Quit", quit_app)
+        self.btn_challenger = make_button(
+            start_y + spacing * 3,
+            "Challenger Levels",
+            start_challenger,
+        )
+        self.btn_quit = make_button(start_y + spacing * 4, "Quit", quit_app)
 
         title = gui.Text(
             self.window.width / 2,
@@ -283,8 +292,11 @@ class App:
             button.set_hook(select_map)
             return self._register_button(button)
 
-        for index in range(1, 4):
-            make_map_button(index)
+        if difficulty in ("easy", "medium", "hard"):
+            for index in range(1, 4):
+                make_map_button(index)
+        elif difficulty == "challenger":
+            make_map_button(1)
 
         def go_back() -> None:
             self._build_root_menu()
@@ -331,16 +343,7 @@ class App:
             )
             self.renderer.add(label, layer=LAYER_MENU)
         except (ValueError, FileNotFoundError) as exc:
-            err_text = gui.Text(
-                self.window.width // 2,
-                self.window.height // 2,
-                28,
-                f"Error: {exc}",
-                color=(255, 80, 80),
-                centered=True,
-                lock_to_screen=True,
-            )
-            self.renderer.add(err_text, layer=LAYER_MENU)
+            _show_error_overlay(self.renderer, self.window, str(exc))
 
     def _center_map_view(self) -> None:
         """Set zoom and offset so the current map fits centred on screen."""
@@ -436,6 +439,63 @@ class App:
 # Direct test mode:  python main.py <map_file>
 # ---------------------------------------------------------------------------
 
+def _show_error_overlay(
+    renderer: gui.LayeredRenderer,
+    window: gui.Window,
+    error_message: str,
+) -> None:
+    """Display parser errors as a stacked list of red labels with a backdrop."""
+    error_lines: list[str] = error_message.split("\n")
+    line_height: int = 26
+    title_height: int = 36
+    pad: int = 24
+
+    # Box dimensions
+    box_w: int = max(600, min(1200, window.width - 200))
+    box_h: int = title_height + len(error_lines) * line_height + pad * 2
+
+    # Box centre fixed at screen centre
+    cx: int = window.width // 2
+    cy: int = window.height // 2
+
+    # Top of the content area (title)
+    content_top: int = cy - box_h // 2 + pad
+
+    # Dark semi-transparent backdrop
+    backdrop = gui.Rect(
+        cx, cy, box_w, box_h,
+        color=(20, 20, 30),
+        alpha=210,
+        radius=12,
+    )
+    renderer.add(backdrop, layer=LAYER_MENU)
+
+    # Title
+    title_err = gui.Text(
+        cx,
+        content_top,
+        32,
+        "--  Parsing Errors  --",
+        color=(255, 100, 100),
+        centered=True,
+        lock_to_screen=False,
+    )
+    renderer.add(title_err, layer=LAYER_MENU)
+
+    # Each error line
+    for idx, err_line in enumerate(error_lines):
+        label = gui.Text(
+            cx,
+            content_top + title_height + idx * line_height,
+            22,
+            err_line.strip(),
+            color=(255, 160, 140),
+            centered=True,
+            lock_to_screen=False,
+        )
+        renderer.add(label, layer=LAYER_MENU)
+
+
 def _center_view(window: gui.Window, map_gui_obj: gui.Map_gui) -> None:
     """Set *window* zoom and offset so *map_gui_obj* fits centred."""
     hubs = list(map_gui_obj.hubs.values())
@@ -472,26 +532,33 @@ def _quick_view(map_path: str) -> None:
     window = gui.Window()
     renderer = gui.LayeredRenderer()
 
-    # Parse and build
-    parsed = parser.parse_map_file(map_path)
-    map_gui_obj = build_map_gui(parsed)
+    # Parse and build (may fail gracefully)
+    map_gui_obj: Optional[gui.Map_gui] = None
+    try:
+        parsed = parser.parse_map_file(map_path)
+        map_gui_obj = build_map_gui(parsed)
 
-    for conn in map_gui_obj.connections:
-        renderer.add(conn, layer=LAYER_CONNECTIONS)
-    for hub_obj in map_gui_obj.hubs.values():
-        renderer.add(hub_obj, layer=LAYER_HUBS)
+        for conn in map_gui_obj.connections:
+            renderer.add(conn, layer=LAYER_CONNECTIONS)
+        for hub_obj in map_gui_obj.hubs.values():
+            renderer.add(hub_obj, layer=LAYER_HUBS)
 
-    # Center the view
-    _center_view(window, map_gui_obj)
+        # Center the view
+        _center_view(window, map_gui_obj)
+    except (ValueError, FileNotFoundError) as exc:
+        _show_error_overlay(renderer, window, str(exc))
 
-    title = gui.Text(
-        window.width // 2, 30, 32,
-        os.path.basename(map_path),
-        centered=True,
-    )
+    if map_gui_obj is not None:
+        title = gui.Text(
+            window.width // 2, 30, 32,
+            os.path.basename(map_path),
+            centered=True,
+        )
+        renderer.add(title, layer=LAYER_MENU)
     hint = gui.Text(
         window.width // 2, window.height - 50, 24,
-        "ESC / Q = quit  |  scroll = zoom  |  middle-drag = pan  |  SPACE = reset view",
+        "ESC / Q = quit  |  scroll = zoom  |  " +
+        "middle-drag = pan  |  SPACE = reset view",
         centered=True,
     )
     renderer.add(title, layer=LAYER_MENU)
@@ -508,7 +575,7 @@ def _quick_view(map_path: str) -> None:
             if event.type == pygame.KEYDOWN:
                 if event.key in (pygame.K_ESCAPE, pygame.K_q):
                     running = False
-                if event.key == pygame.K_SPACE:
+                if event.key == pygame.K_SPACE and map_gui_obj is not None:
                     _center_view(window, map_gui_obj)
             if event.type == pygame.MOUSEWHEEL:
                 mx, my = pygame.mouse.get_pos()

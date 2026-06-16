@@ -20,6 +20,10 @@ def bezier(x: float) -> float:
     """calculate bezier curve for smooth moves or transitions"""
     return 3 * x**2 - 2 * x**3
 
+# =============================================================================
+# Validation functions
+# =============================================================================
+
 
 def _ensure_number(
     value: float,
@@ -87,6 +91,11 @@ def _ensure_image_path(image_path: str) -> str:
     if not os.path.isfile(image_path):
         raise FileNotFoundError(f"image_path does not exist: {image_path}")
     return image_path
+
+
+# =============================================================================
+# GUI Classes
+# =============================================================================
 
 
 class Window:

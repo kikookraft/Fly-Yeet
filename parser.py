@@ -252,12 +252,14 @@ class ParseErrorCollector:
             print(f"{self.RED}{err}{self.RESET}", file=sys.stderr)
 
     def raise_if_any(self) -> None:
-        """Print all errors and raise if any were collected."""
+        """Print all errors and raise :class:`ValueError` if any were collected.
+
+        The exception message contains every error joined by newlines so
+        the GUI can display them individually.
+        """
         if self.errors:
             self.print_all()
-            raise ValueError(
-                f"Parsing failed with {len(self.errors)} error(s)"
-            )
+            raise ValueError("\n".join(self.errors))
 
 
 # =============================================================================
