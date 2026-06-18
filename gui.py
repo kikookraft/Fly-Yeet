@@ -1,6 +1,6 @@
 import os
 import random
-from typing import Any, Callable, Dict, Protocol
+from typing import Any, Callable, Dict, Optional, Protocol
 
 import pygame
 import math
@@ -882,9 +882,11 @@ class Rect:
                     scaled_rect.fill(rgba_color)
 
                 if self.debug and self.alive:
-                    scaled_debug = pygame.transform.scale(
-                        self.debug_img, (sw, sh))
-                    scaled_rect.blit(scaled_debug, (0, 0))
+                    if hasattr(self, "debug_img"):
+                        scaled_debug = pygame.transform.scale(
+                            pygame.image.load("assets/up.png").convert_alpha(),
+                            (int(self.width), int(self.height)))
+                        scaled_rect.blit(scaled_debug, (0, 0))
 
                 self._cached_rect_image = pygame.transform.rotate(
                     scaled_rect,
@@ -1089,6 +1091,11 @@ class Hub_gui(Rect):
                          self.size, self.size,
                          radius=self.size//2, color=color)
         self.init_image()
+        self.current_drones: list[Drone] = []
+
+        # Cached debug labels (created lazily in render_text)
+        self._debug_name_text: Optional[Text] = None
+        self._debug_count_text: Optional[Text] = None
 
     def init_image(self) -> None:
         """Initialize the hub image."""
@@ -1112,10 +1119,71 @@ class Hub_gui(Rect):
 
     def draw(self, window: Window) -> None:
         super().draw(window)
-        # Make the icon scale with zoom (absolute_size mode uses scale
-        # as a pixel size, so multiply base scale by current zoom)
+        # Scale icon with zoom (absolute_size → scale is pixel size)
         self.image.scale = self._base_img_scale * window.get_zoom()
         self.image.draw(window)
+        if self.debug:
+            self.render_text(window)
+
+    def render_text(self, window: Window) -> None:
+        """Render debug labels (name + drone count) with a dark backdrop."""
+        text_color: tuple[int, int, int] = (255, 255, 255)
+        count_str: str = f"{len(self.current_drones)}/{self.max_drones}"
+
+        # --- lazy-init cached objects ---
+        if self._debug_name_text is None:
+            self._debug_name_text = Text(
+                text=self.name, color=text_color,
+                centered=True, lock_to_screen=False,
+            )
+        if self._debug_count_text is None:
+            self._debug_count_text = Text(
+                text="", color=text_color,
+                centered=True, lock_to_screen=False,
+            )
+
+        z: float = window.get_zoom()
+        name_font_sz: int = max(8, int(14 * z))
+        count_font_sz: int = max(8, int(12 * z))
+
+        # --- name label (above hub) ---
+        self._debug_name_text.set_text(self.name)
+        self._debug_name_text.set_size(name_font_sz)
+        name_sx, name_sy = window.world_to_screen((
+            self.x,
+            self.y - self.size // 2 - 10,
+        ))
+        self._debug_name_text.set_pos(name_sx, name_sy)
+        self._debug_name_text.draw(window.screen)
+
+        # --- count label (below hub) ---
+        self._debug_count_text.set_text(count_str)
+        self._debug_count_text.set_size(count_font_sz)
+        cnt_sx, cnt_sy = window.world_to_screen((
+            self.x,
+            self.y + self.size // 2 + 10,
+        ))
+        self._debug_count_text.set_pos(cnt_sx, cnt_sy)
+        self._debug_count_text.draw(window.screen)
+
+    def get_position(self) -> tuple[float, float]:
+        """Return the hub position."""
+        return (self.x, self.y)
+
+    def can_i_come_in(self) -> bool:
+        """Return whether a drone can enter the hub."""
+        return len(self.current_drones) < self.max_drones
+
+    def go(self, drone: Drone) -> None:
+        """Set the new drone destination to this hub."""
+        drone.move(self.x, self.y)
+
+    def let_me_in(self, drone: Drone) -> None:
+        """Add a drone to the hub."""
+        if self.can_i_come_in():
+            self.current_drones.append(drone)
+        else:
+            raise ValueError("Hub is full")
 
 
 class Connection_gui:
@@ -1181,6 +1249,7 @@ class Map_gui:
     def __init__(self) -> None:
         self.hubs: dict[str, Hub_gui] = {}
         self.connections: list[Connection_gui] = []
+        self.debug: bool = False
 
     def add_hub(self, hub: Hub_gui) -> None:
         """Register a hub GUI object."""
@@ -1196,6 +1265,12 @@ class Map_gui:
             conn.draw(window)
         for hub in self.hubs.values():
             hub.draw(window)
+
+    def set_debug(self, debug: bool) -> None:
+        """Set debug mode for all hubs."""
+        self.debug = debug
+        for hub in self.hubs.values():
+            hub.set_debug(debug)
 
 
 class LayeredRenderer:

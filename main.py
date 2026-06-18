@@ -375,6 +375,9 @@ class App:
                         else:
                             self.window.set_zoom(1.0)
                             self.window.set_offset(0, 0)
+                    if event.key == pygame.K_d:
+                        self._map_gui.set_debug(
+                            not self._map_gui.debug) if self._map_gui else None
                 if event.type == pygame.MOUSEWHEEL:
                     mouse_x, mouse_y = pygame.mouse.get_pos()
                     world_x, world_y = self.window.screen_to_world(
