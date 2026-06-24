@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import random
 from typing import Any, Callable, Dict, Optional, Protocol
@@ -975,10 +977,10 @@ class Drone(Rect):
         """Apply drone collision forces."""
         if not self.alive:
             return
-        hitbox_radius: float = 100  # Safe distance between drones
+        hitbox_radius: float = 70  # Safe distance between drones
 
         for other in all_drones:  # collision with other
-            if other is self:
+            if other is self or other.alive is False:
                 continue
 
             dx: float = self.x - other.x
@@ -1091,7 +1093,9 @@ class Hub_gui(Rect):
                          self.size, self.size,
                          radius=self.size//2, color=color)
         self.init_image()
-        self.current_drones: list[Drone] = []
+        self.current_drones: list[object] = []
+        # Connections attached to this hub (wired by Map_gui.build_adjacency)
+        self.connections: list[Connection_gui] = []
 
         # Cached debug labels (created lazily in render_text)
         self._debug_name_text: Optional[Text] = None
@@ -1170,20 +1174,40 @@ class Hub_gui(Rect):
         """Return the hub position."""
         return (self.x, self.y)
 
-    def can_i_come_in(self) -> bool:
-        """Return whether a drone can enter the hub."""
+    def can_accept_drone(self) -> bool:
+        """Return whether a drone can enter the hub.
+
+        Start and end hubs are exempt from capacity limits (per subject
+        rules: start may share initially, end receives all drones).
+        """
+        if self.is_start or self.is_end:
+            return True
         return len(self.current_drones) < self.max_drones
 
-    def go(self, drone: Drone) -> None:
-        """Set the new drone destination to this hub."""
+    def update_drone_goal(self, drone: Drone) -> None:
+        """Set the visual drone destination to this hub (smooth move)."""
         drone.move(self.x, self.y)
 
-    def let_me_in(self, drone: Drone) -> None:
-        """Add a drone to the hub."""
-        if self.can_i_come_in():
-            self.current_drones.append(drone)
-        else:
-            raise ValueError("Hub is full")
+    def add_drone(self, drone: object) -> None:
+        """Register a drone as occupying this hub (unconditional).
+
+        Capacity enforcement happens at the simulation level via
+        :meth:`can_accept_drone` — this method always appends so that
+        spawning and undo work correctly.
+        """
+        self.current_drones.append(drone)
+
+    def remove_drone(self, drone: object) -> None:
+        """Remove a drone from this hub's occupancy list."""
+        if drone in self.current_drones:
+            self.current_drones.remove(drone)
+
+    def get_connection_to(self, target: Hub_gui) -> Optional[Connection_gui]:
+        """Return the connection linking self to *target*, or ``None``."""
+        for conn in self.connections:
+            if conn.connects(self.name, target.name):
+                return conn
+        return None
 
 
 class Connection_gui:
@@ -1213,6 +1237,41 @@ class Connection_gui:
         self.max_link_capacity: int = max_link_capacity
         self.color: tuple[int, int, int] = _ensure_color(color)
         self.color_from_capacity()  # Set color based on capacity
+        # Drones currently traversing this connection (restricted-zone transit)
+        self.traversing_drones: list[object] = []
+
+    # ------------------------------------------------------------------
+    # Drone movement helpers
+    # ------------------------------------------------------------------
+
+    def can_traverse(self) -> bool:
+        """Return ``True`` if a drone may enter this connection."""
+        return len(self.traversing_drones) < self.max_link_capacity
+
+    def traverse(self, drone: object) -> None:
+        """Mark *drone* as traversing this connection."""
+        if not self.can_traverse():
+            raise ValueError("Connection at capacity")
+        self.traversing_drones.append(drone)
+
+    def release(self, drone: object) -> None:
+        """Remove *drone* from this connection."""
+        if drone in self.traversing_drones:
+            self.traversing_drones.remove(drone)
+
+    def connects(self, name_a: str, name_b: str) -> bool:
+        """Return ``True`` if this connection links the two named hubs."""
+        return {self.hub_a.name, self.hub_b.name} == {name_a, name_b}
+
+    def other_end(self, hub: Hub_gui) -> Hub_gui:
+        """Return the hub at the opposite end of this connection."""
+        if hub is self.hub_a:
+            return self.hub_b
+        return self.hub_a
+
+    # ------------------------------------------------------------------
+    # Rendering
+    # ------------------------------------------------------------------
 
     def draw(self, window: Window) -> None:
         """Draw the line between the two hubs on *window*."""
@@ -1258,6 +1317,24 @@ class Map_gui:
     def add_connection(self, conn: Connection_gui) -> None:
         """Register a connection GUI object."""
         self.connections.append(conn)
+
+    def build_adjacency(self) -> None:
+        """Wire every hub with the connections attached to it."""
+        for hub in self.hubs.values():
+            hub.connections.clear()
+        for conn in self.connections:
+            conn.hub_a.connections.append(conn)
+            conn.hub_b.connections.append(conn)
+
+    def get_neighbors(self, hub_name: str) -> list[Hub_gui]:
+        """Return hubs directly connected to *hub_name*."""
+        hub = self.hubs.get(hub_name)
+        if hub is None:
+            return []
+        result: list[Hub_gui] = []
+        for conn in hub.connections:
+            result.append(conn.other_end(hub))
+        return result
 
     def draw(self, window: Window) -> None:
         """Render connections first, then hubs on top."""

@@ -19,6 +19,8 @@ import pygame
 
 import gui
 import parser
+import algo
+import simulation
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +109,12 @@ class App:
 
         self.interactives: list[gui.Button] = []
         self._map_gui: Optional[gui.Map_gui] = None
+        self._sim: Optional[simulation.Simulation] = None
+        self._auto_play: bool = False
+        self._auto_timer: float = 0.0
+        self._auto_interval: float = 0.4  # seconds between auto-steps
+        self._key_repeat_last: float = 0.0
+        self._key_repeat_delay: float = 0.1  # seconds between held-key steps
         self._build_root_menu()
 
         self.fps = gui.Text(10, 10, 24, "FPS: 0")
@@ -318,16 +326,42 @@ class App:
         self.renderer.clear_layer(LAYER_BG)
         self.renderer.clear_layer(LAYER_CONNECTIONS)
         self.renderer.clear_layer(LAYER_HUBS)
+        self.renderer.clear_layer(LAYER_DRONES)
         self._clear_menu_layers()
+        self._auto_play = False
 
         try:
             parsed = parser.parse_map_file(map_path)
             self._map_gui = build_map_gui(parsed)
+            # Build adjacency so hubs know their connections
+            self._map_gui.build_adjacency()
+
             # Add connections (lines behind) and hubs on dedicated layers
             for conn in self._map_gui.connections:
                 self.renderer.add(conn, layer=LAYER_CONNECTIONS)
             for hub_obj in self._map_gui.hubs.values():
                 self.renderer.add(hub_obj, layer=LAYER_HUBS)
+
+            # Create pathfinder and simulation
+            pathfinder = algo.Pathfinder(self._map_gui)
+            self._sim = simulation.Simulation(self._map_gui, pathfinder)
+
+            # Spawn drones at start hub
+            self._sim.spawn_drones(parsed.nb_drones)
+
+            # Create visual drone objects and add to renderer
+            start_hub = self._map_gui.hubs.get(
+                self._sim._find_start_name()
+            )
+            for sd in self._sim.drones:
+                if start_hub is not None:
+                    drone_gui_obj = gui.Drone(
+                        start_hub.x, start_hub.y,
+                        debug=False,
+                        cooldown=-1,  # no auto-wander
+                    )
+                    sd.current_drone_gui = drone_gui_obj
+                    self.renderer.add(drone_gui_obj, layer=LAYER_DRONES)
 
             # Center the map in the view
             self._center_map_view()
@@ -342,6 +376,17 @@ class App:
                 lock_to_screen=True,
             )
             self.renderer.add(label, layer=LAYER_MENU)
+
+            # Hint text
+            hint = gui.Text(
+                self.window.width // 2,
+                self.window.height - 50,
+                22,
+                "RIGHT=step  |  LEFT=undo  |  A=auto  |  D=debug  |  SPACE=center",
+                centered=True,
+                lock_to_screen=True,
+            )
+            self.renderer.add(hint, layer=LAYER_MENU)
         except (ValueError, FileNotFoundError) as exc:
             _show_error_overlay(self.renderer, self.window, str(exc))
 
@@ -349,6 +394,35 @@ class App:
         """Set zoom and offset so the current map fits centred on screen."""
         if self._map_gui is not None:
             _center_view(self.window, self._map_gui)
+
+    def _sim_step(self) -> None:
+        """Advance the simulation by one turn and move visual drones."""
+        if self._sim is None or self._map_gui is None:
+            return
+        if self._sim.is_finished():
+            self._auto_play = False
+            return
+
+        self._sim.step()
+
+        # Move every visual drone toward its current hub
+        for sd in self._sim.drones:
+            dg = getattr(sd, "current_drone_gui", None)
+            if dg is not None:
+                dg.move(sd.current_hub.x, sd.current_hub.y)
+
+    def _sim_step_back(self) -> None:
+        """Undo the last simulation turn."""
+        if self._sim is None or self._map_gui is None:
+            return
+        self._auto_play = False  # pause auto on manual undo
+        if self._sim.step_back():
+            # Revive all drones and move them to their restored hubs
+            for sd in self._sim.drones:
+                dg = getattr(sd, "current_drone_gui", None)
+                if dg is not None:
+                    dg.god_touch()
+                    dg.move(sd.current_hub.x, sd.current_hub.y)
 
     def _handle_menu_escape(self) -> None:
         if self.menu_level == "root":
@@ -375,9 +449,18 @@ class App:
                         else:
                             self.window.set_zoom(1.0)
                             self.window.set_offset(0, 0)
-                    if event.key == pygame.K_d:
-                        self._map_gui.set_debug(
-                            not self._map_gui.debug) if self._map_gui else None
+                    # --- Simulation controls (map mode only) ---
+                    if self.state == "map" and self._sim is not None:
+                        if event.key == pygame.K_a:
+                            self._auto_play = not self._auto_play
+                            if self._auto_play:
+                                self._auto_timer = (
+                                    pygame.time.get_ticks() / 1000.0
+                                )
+                        elif event.key == pygame.K_d:
+                            if self._map_gui is not None:
+                                self._map_gui.set_debug(
+                                    not self._map_gui.debug)
                 if event.type == pygame.MOUSEWHEEL:
                     mouse_x, mouse_y = pygame.mouse.get_pos()
                     world_x, world_y = self.window.screen_to_world(
@@ -416,6 +499,50 @@ class App:
                 self.logo_phase += 0.075
                 self.logo.set_rotation(math.sin(self.logo_phase) * 25)
 
+            # --- Held-key repeat (RIGHT / LEFT for fast stepping) ---
+            if self.state == "map" and self._sim is not None:
+                keys = pygame.key.get_pressed()
+                now = pygame.time.get_ticks() / 1000.0
+                if now - self._key_repeat_last >= self._key_repeat_delay:
+                    if keys[pygame.K_RIGHT]:
+                        self._key_repeat_last = now
+                        self._auto_play = False
+                        self._sim_step()
+                    elif keys[pygame.K_LEFT]:
+                        self._key_repeat_last = now
+                        self._auto_play = False
+                        self._sim_step_back()
+
+            # --- Auto-play ---
+            if self._auto_play and self.state == "map" and self._sim is not None:
+                now = pygame.time.get_ticks() / 1000.0
+                if now - self._auto_timer >= self._auto_interval:
+                    self._auto_timer = now
+                    if not self._sim.is_finished():
+                        self._sim_step()
+                    else:
+                        self._auto_play = False
+
+            # --- Visual cleanup: kill arrived drones after cooldown ---
+            if self.state == "map" and self._sim is not None:
+                now = pygame.time.get_ticks() / 1000.0
+                cooldown: float = 1  # seconds to linger after arrival
+                proximity: float = 70.0  # px from hub centre = "close enough"
+                for sd in self._sim.drones:
+                    dg = getattr(sd, "current_drone_gui", None)
+                    if dg is None or not sd.arrived:
+                        continue
+                    if now - sd.arrival_tick < cooldown:
+                        continue
+                    # Kill when close to hub centre (collisions may
+                    # prevent is_mooving from ever settling to False)
+                    dist: float = math.hypot(
+                        dg.x - sd.current_hub.x,
+                        dg.y - sd.current_hub.y,
+                    )
+                    if dist < proximity:
+                        dg.kill()
+
             self.renderer.update(self.window)
 
             self.window.draw_background()
@@ -424,9 +551,19 @@ class App:
             self.fps.set_text(f"FPS: {self.window.get_fps()}")
             self.fps.draw(self.window.get_screen())
             if self.state == "map":
-                self.state_text.set_text(
-                    f"Map mode: {self.selected_map or 'none'}",
-                )
+                if self._sim is not None:
+                    active = len(self._sim.active_drones())
+                    total = len(self._sim.drones)
+                    auto = "[AUTO]" if self._auto_play else ""
+                    done = "DONE!" if self._sim.is_finished() else ""
+                    self.state_text.set_text(
+                        f"Turn {self._sim.turn}  |  "
+                        f"Drones {active}/{total}  {auto}  {done}"
+                    )
+                else:
+                    self.state_text.set_text(
+                        f"Map mode: {self.selected_map or 'none'}",
+                    )
             elif self.menu_level == "root":
                 self.state_text.set_text("State: menu")
             else:
