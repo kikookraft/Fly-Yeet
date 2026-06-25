@@ -112,9 +112,11 @@ class App:
         self._sim: Optional[simulation.Simulation] = None
         self._auto_play: bool = False
         self._auto_timer: float = 0.0
-        self._auto_interval: float = 0.4  # seconds between auto-steps
+        self._auto_interval: float = 1.0  # seconds between auto-steps
         self._key_repeat_last: float = 0.0
+        self._key_repeat_cooldown: float = 0.5  # seconds before spam
         self._key_repeat_delay: float = 0.1  # seconds between held-key steps
+        self._key_repeat: bool = False
         self._build_root_menu()
 
         self.fps = gui.Text(10, 10, 24, "FPS: 0")
@@ -503,15 +505,30 @@ class App:
             if self.state == "map" and self._sim is not None:
                 keys = pygame.key.get_pressed()
                 now = pygame.time.get_ticks() / 1000.0
-                if now - self._key_repeat_last >= self._key_repeat_delay:
-                    if keys[pygame.K_RIGHT]:
+                # TODO: When single press, just execute the action.
+                # If continuous press > _key_repeat_cooldown sec: repeqt ation every _key_repeat_delay sec
+                if keys[pygame.K_RIGHT] or keys[pygame.K_LEFT]:
+                    if not self._key_repeat:
+                        self._key_repeat = True
                         self._key_repeat_last = now
-                        self._auto_play = False
-                        self._sim_step()
-                    elif keys[pygame.K_LEFT]:
-                        self._key_repeat_last = now
-                        self._auto_play = False
-                        self._sim_step_back()
+                        if keys[pygame.K_RIGHT]:
+                            self._auto_play = False
+                            self._sim_step()
+                        elif keys[pygame.K_LEFT]:
+                            self._auto_play = False
+                            self._sim_step_back()
+                    else:
+                        if now - self._key_repeat_last >= self._key_repeat_cooldown:
+                            if now - self._key_repeat_last >= self._key_repeat_delay:
+                                self._key_repeat_last = now
+                                if keys[pygame.K_RIGHT]:
+                                    self._auto_play = False
+                                    self._sim_step()
+                                elif keys[pygame.K_LEFT]:
+                                    self._auto_play = False
+                                    self._sim_step_back()
+                else:
+                    self._key_repeat = False
 
             # --- Auto-play ---
             if self._auto_play and self.state == "map" and self._sim is not None:

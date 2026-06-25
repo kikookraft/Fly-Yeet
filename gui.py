@@ -121,6 +121,7 @@ class Window:
             "assets/tile.png").convert()
         self.bg_w: int = self.background_tile.get_width()
         self.bg_h: int = self.background_tile.get_height()
+        pygame.key.set_repeat(500, 50)
 
     def draw_background(self) -> None:
         """Draw the tiled background."""
@@ -977,7 +978,7 @@ class Drone(Rect):
         """Apply drone collision forces."""
         if not self.alive:
             return
-        hitbox_radius: float = 70  # Safe distance between drones
+        hitbox_radius: float = 75  # Safe distance between drones
 
         for other in all_drones:  # collision with other
             if other is self or other.alive is False:
