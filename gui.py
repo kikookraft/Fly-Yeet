@@ -121,7 +121,9 @@ class Window:
             "assets/tile.png").convert()
         self.bg_w: int = self.background_tile.get_width()
         self.bg_h: int = self.background_tile.get_height()
-        pygame.key.set_repeat(500, 50)
+        # Mouse tracking (updated each frame by main loop)
+        self.mouse_screen_pos: tuple[int, int] = (0, 0)
+        self.mouse_world_pos: tuple[int, int] = (0, 0)
 
     def draw_background(self) -> None:
         """Draw the tiled background."""
@@ -978,7 +980,7 @@ class Drone(Rect):
         """Apply drone collision forces."""
         if not self.alive:
             return
-        hitbox_radius: float = 75  # Safe distance between drones
+        hitbox_radius: float = 70  # Safe distance between drones
 
         for other in all_drones:  # collision with other
             if other is self or other.alive is False:
@@ -1097,10 +1099,12 @@ class Hub_gui(Rect):
         self.current_drones: list[object] = []
         # Connections attached to this hub (wired by Map_gui.build_adjacency)
         self.connections: list[Connection_gui] = []
+        # Hover state for debug (set by main loop)
+        self._hovered: bool = False
 
-        # Cached debug labels (created lazily in render_text)
-        self._debug_name_text: Optional[Text] = None
-        self._debug_count_text: Optional[Text] = None
+        # Cached count label (lazy-init, reused across frames)
+        self._count_text: Optional[Text] = None
+        self._count_last: str = ""
 
     def init_image(self) -> None:
         """Initialize the hub image."""
@@ -1127,49 +1131,32 @@ class Hub_gui(Rect):
         # Scale icon with zoom (absolute_size → scale is pixel size)
         self.image.scale = self._base_img_scale * window.get_zoom()
         self.image.draw(window)
-        if self.debug:
-            self.render_text(window)
+        if self._hovered:
+            self._draw_count_text(window)
 
-    def render_text(self, window: Window) -> None:
-        """Render debug labels (name + drone count) with a dark backdrop."""
-        text_color: tuple[int, int, int] = (255, 255, 255)
+    def _draw_count_text(self, window: Window) -> None:
+        """Draw a cached white count label above the hub (no background)."""
         count_str: str = f"{len(self.current_drones)}/{self.max_drones}"
 
-        # --- lazy-init cached objects ---
-        if self._debug_name_text is None:
-            self._debug_name_text = Text(
-                text=self.name, color=text_color,
+        if self._count_text is None:
+            self._count_text = Text(
+                text="", color=(255, 255, 255),
                 centered=True, lock_to_screen=False,
             )
-        if self._debug_count_text is None:
-            self._debug_count_text = Text(
-                text="", color=text_color,
-                centered=True, lock_to_screen=False,
-            )
+
+        # Only re-render font surface when text changes
+        if count_str != self._count_last:
+            self._count_text.set_text(count_str)
+            self._count_last = count_str
 
         z: float = window.get_zoom()
-        name_font_sz: int = max(8, int(14 * z))
-        count_font_sz: int = max(8, int(12 * z))
-
-        # --- name label (above hub) ---
-        self._debug_name_text.set_text(self.name)
-        self._debug_name_text.set_size(name_font_sz)
-        name_sx, name_sy = window.world_to_screen((
+        self._count_text.set_size(max(32, int(14 * z)))
+        sx, sy = window.world_to_screen((
             self.x,
-            self.y - self.size // 2 - 10,
+            self.y - self.size // 2 - 20,
         ))
-        self._debug_name_text.set_pos(name_sx, name_sy)
-        self._debug_name_text.draw(window.screen)
-
-        # --- count label (below hub) ---
-        self._debug_count_text.set_text(count_str)
-        self._debug_count_text.set_size(count_font_sz)
-        cnt_sx, cnt_sy = window.world_to_screen((
-            self.x,
-            self.y + self.size // 2 + 10,
-        ))
-        self._debug_count_text.set_pos(cnt_sx, cnt_sy)
-        self._debug_count_text.draw(window.screen)
+        self._count_text.set_pos(sx, sy)
+        self._count_text.draw(window.screen)
 
     def get_position(self) -> tuple[float, float]:
         """Return the hub position."""

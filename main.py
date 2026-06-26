@@ -112,11 +112,11 @@ class App:
         self._sim: Optional[simulation.Simulation] = None
         self._auto_play: bool = False
         self._auto_timer: float = 0.0
-        self._auto_interval: float = 1.0  # seconds between auto-steps
-        self._key_repeat_last: float = 0.0
-        self._key_repeat_cooldown: float = 0.5  # seconds before spam
-        self._key_repeat_delay: float = 0.1  # seconds between held-key steps
-        self._key_repeat: bool = False
+        self._auto_interval: float = 0.5  # seconds between auto-steps
+        self._key_held: Optional[int] = None  # which arrow is held (or None)
+        self._key_press_time: float = 0.0
+        self._key_repeat_cooldown: float = 0.5   # initial delay before repeat
+        self._key_repeat_delay: float = 0.05     # interval between repeats
         self._build_root_menu()
 
         self.fps = gui.Text(10, 10, 24, "FPS: 0")
@@ -501,34 +501,90 @@ class App:
                 self.logo_phase += 0.075
                 self.logo.set_rotation(math.sin(self.logo_phase) * 25)
 
-            # --- Held-key repeat (RIGHT / LEFT for fast stepping) ---
+            # --- Held-key repeat: Windows-style (first press instant,
+            #     then cooldown, then rapid repeat) ---
             if self.state == "map" and self._sim is not None:
                 keys = pygame.key.get_pressed()
                 now = pygame.time.get_ticks() / 1000.0
-                # TODO: When single press, just execute the action.
-                # If continuous press > _key_repeat_cooldown sec: repeqt ation every _key_repeat_delay sec
-                if keys[pygame.K_RIGHT] or keys[pygame.K_LEFT]:
-                    if not self._key_repeat:
-                        self._key_repeat = True
-                        self._key_repeat_last = now
-                        if keys[pygame.K_RIGHT]:
-                            self._auto_play = False
-                            self._sim_step()
-                        elif keys[pygame.K_LEFT]:
-                            self._auto_play = False
-                            self._sim_step_back()
+
+                # Determine which arrow is currently held
+                held: Optional[int] = None
+                if keys[pygame.K_RIGHT]:
+                    held = pygame.K_RIGHT
+                elif keys[pygame.K_LEFT]:
+                    held = pygame.K_LEFT
+
+                if held is None:
+                    # Key released → reset
+                    self._key_held = None
+                elif held != self._key_held:
+                    # Different key pressed (or first press) → instant step
+                    self._key_held = held
+                    self._key_press_time = now
+                    self._auto_play = False
+                    if held == pygame.K_RIGHT:
+                        self._sim_step()
                     else:
-                        if now - self._key_repeat_last >= self._key_repeat_cooldown:
-                            if now - self._key_repeat_last >= self._key_repeat_delay:
-                                self._key_repeat_last = now
-                                if keys[pygame.K_RIGHT]:
-                                    self._auto_play = False
-                                    self._sim_step()
-                                elif keys[pygame.K_LEFT]:
-                                    self._auto_play = False
-                                    self._sim_step_back()
+                        self._sim_step_back()
                 else:
-                    self._key_repeat = False
+                    # Same key still held → check if ready to repeat
+                    elapsed: float = now - self._key_press_time
+                    if elapsed >= self._key_repeat_cooldown:
+                        # How many repeats since cooldown ended?
+                        repeat_elapsed: float = (
+                            elapsed - self._key_repeat_cooldown
+                        )
+                        steps: int = int(
+                            repeat_elapsed / self._key_repeat_delay
+                        )
+                        if steps > 0:
+                            self._key_press_time += (
+                                steps * self._key_repeat_delay
+                            )
+                            self._auto_play = False
+                            for _ in range(steps):
+                                if held == pygame.K_RIGHT:
+                                    self._sim_step()
+                                else:
+                                    self._sim_step_back()
+
+            # --- Update mouse position for debug hover ---
+            self.window.mouse_screen_pos = pygame.mouse.get_pos()
+            self.window.mouse_world_pos = self.window.screen_to_world(
+                self.window.mouse_screen_pos
+            )
+
+            # --- Debug: hover on a hub → show count; drone lines on ---
+            if (self.state == "map" and self._map_gui is not None
+                    and self._map_gui.debug):
+                # Clear all hovers first
+                for hub in self._map_gui.hubs.values():
+                    hub._hovered = False
+                # Find the hub under the cursor
+                mx, my = self.window.mouse_world_pos
+                hover_range: float = (
+                    list(self._map_gui.hubs.values())[0].size
+                    if self._map_gui.hubs else 150
+                )
+                for hub in self._map_gui.hubs.values():
+                    if math.hypot(mx - hub.x, my - hub.y) < hover_range:
+                        hub._hovered = True
+                        break
+                # Drone debug lines
+                if self._sim is not None:
+                    for sd in self._sim.drones:
+                        dg = getattr(sd, "current_drone_gui", None)
+                        if dg is not None:
+                            dg.debug = True
+            else:
+                if self._map_gui is not None:
+                    for hub in self._map_gui.hubs.values():
+                        hub._hovered = False
+                if self._sim is not None:
+                    for sd in self._sim.drones:
+                        dg = getattr(sd, "current_drone_gui", None)
+                        if dg is not None:
+                            dg.debug = False
 
             # --- Auto-play ---
             if self._auto_play and self.state == "map" and self._sim is not None:
