@@ -407,10 +407,18 @@ class App:
 
         self._sim.step()
 
-        # Move every visual drone toward its current hub
+        # Move every visual drone toward its current hub.
+        # Drones in transit (restricted zone) go to the connection midpoint.
         for sd in self._sim.drones:
             dg = getattr(sd, "current_drone_gui", None)
-            if dg is not None:
+            if dg is None:
+                continue
+            if sd.transit_turns > 0 and sd.transit_connection is not None:
+                conn = sd.transit_connection
+                mx: float = (conn.hub_a.x + conn.hub_b.x) / 2.0
+                my: float = (conn.hub_a.y + conn.hub_b.y) / 2.0
+                dg.move(mx, my)
+            else:
                 dg.move(sd.current_hub.x, sd.current_hub.y)
 
     def _sim_step_back(self) -> None:
@@ -422,8 +430,15 @@ class App:
             # Revive all drones and move them to their restored hubs
             for sd in self._sim.drones:
                 dg = getattr(sd, "current_drone_gui", None)
-                if dg is not None:
-                    dg.god_touch()
+                if dg is None:
+                    continue
+                dg.god_touch()
+                if sd.transit_turns > 0 and sd.transit_connection is not None:
+                    conn = sd.transit_connection
+                    mx = (conn.hub_a.x + conn.hub_b.x) / 2.0
+                    my = (conn.hub_a.y + conn.hub_b.y) / 2.0
+                    dg.move(mx, my)
+                else:
                     dg.move(sd.current_hub.x, sd.current_hub.y)
 
     def _handle_menu_escape(self) -> None:

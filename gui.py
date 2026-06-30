@@ -1141,7 +1141,7 @@ class Hub_gui(Rect):
         if self._count_text is None:
             self._count_text = Text(
                 text="", color=(255, 255, 255),
-                centered=True, lock_to_screen=False,
+                centered=True, lock_to_screen=True,
             )
 
         # Only re-render font surface when text changes
@@ -1150,10 +1150,10 @@ class Hub_gui(Rect):
             self._count_last = count_str
 
         z: float = window.get_zoom()
-        self._count_text.set_size(max(32, int(14 * z)))
+        self._count_text.set_size(max(42, int(14 * z)))
         sx, sy = window.world_to_screen((
             self.x,
-            self.y - self.size // 2 - 20,
+            self.y - self.size // 2 - 30,
         ))
         self._count_text.set_pos(sx, sy)
         self._count_text.draw(window.screen)

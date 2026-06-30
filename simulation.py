@@ -150,6 +150,7 @@ class Simulation:
         )
 
         movements: list[str] = []
+        just_arrived: set[int] = set()  # drone_ids that finished transit
 
         # ---- Phase 1: drones in transit (restricted zone) complete ----
         for sd in self.drones:
@@ -157,6 +158,7 @@ class Simulation:
                 sd.transit_turns -= 1
                 if sd.transit_turns == 0:
                     # Arrive at destination
+                    just_arrived.add(sd.drone_id)
                     dest_name = sd.next_hub_name
                     dest = self.map_gui.hubs.get(dest_name or "")
                     if dest is not None and sd.transit_connection is not None:
@@ -189,7 +191,7 @@ class Simulation:
         # ---- Phase 2: drones leaving hubs free up capacity first ----
         leaving: dict[str, list[SimDrone]] = {}  # hub_name → drones leaving
         for sd in self.drones:
-            if sd.arrived or sd.transit_turns > 0:
+            if sd.arrived or sd.transit_turns > 0 or sd.drone_id in just_arrived:
                 continue
             target_name = sd.next_hub_name
             if target_name is None:
