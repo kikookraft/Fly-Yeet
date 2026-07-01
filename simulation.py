@@ -245,7 +245,7 @@ class Simulation:
 
                 if move_cost == 2:
                     # Restricted zone: drone in transit for 2 turns
-                    sd.transit_turns = 2
+                    sd.transit_turns = 1
                     sd.transit_connection = conn
                     conn_name = f"{sd.current_hub.name}-{target_name}"
                     movements.append(f"D{sd.drone_id}-{conn_name}")
