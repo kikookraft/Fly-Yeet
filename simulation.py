@@ -84,7 +84,7 @@ class Simulation:
     # ------------------------------------------------------------------
 
     def spawn_drones(self, count: int) -> None:
-        """Create *count* drones at the start hub, each with a computed path."""
+        """Create *count* drones at the start, each with a computed path."""
         start = self.map_gui.hubs.get(
             self._find_start_name()
         )
@@ -191,7 +191,8 @@ class Simulation:
         # ---- Phase 2: drones leaving hubs free up capacity first ----
         leaving: dict[str, list[SimDrone]] = {}  # hub_name → drones leaving
         for sd in self.drones:
-            if sd.arrived or sd.transit_turns > 0 or sd.drone_id in just_arrived:
+            if sd.arrived or sd.transit_turns > 0 \
+                    or sd.drone_id in just_arrived:
                 continue
             target_name = sd.next_hub_name
             if target_name is None:

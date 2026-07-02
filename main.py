@@ -384,7 +384,7 @@ class App:
                 self.window.width // 2,
                 self.window.height - 50,
                 22,
-                "RIGHT=step  |  LEFT=undo  |  A=auto  |  D=debug  |  SPACE=center",
+                "RIGHT |  LEFT  |  A=auto  |  D=debug  |  SPACE=center",
                 centered=True,
                 lock_to_screen=True,
             )
@@ -602,7 +602,8 @@ class App:
                             dg.debug = False
 
             # --- Auto-play ---
-            if self._auto_play and self.state == "map" and self._sim is not None:
+            if self._auto_play and self.state == "map" and \
+                    self._sim is not None:
                 now = pygame.time.get_ticks() / 1000.0
                 if now - self._auto_timer >= self._auto_interval:
                     self._auto_timer = now
