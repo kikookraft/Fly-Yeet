@@ -74,23 +74,23 @@ make clean
 
 ## Algorithm
 
-The routing logic is intentionally simple and easy to follow.
+The pathfinder in `algo.py` uses Dijkstra's algorithm to compute shortest paths
+weighted by zone-type movement costs (restricted = 2 turns, normal/priority = 1 turn).
+Blocked zones are excluded from traversal.
 
-The pathfinder in `algo.py` builds information from the parsed map and
-computes a shortest path between the start and end hubs with BFS. Blocked zones are
-skipped. Movement costs are still represented in the simulation: normal and priority
-zones move in one turn, while restricted zones require multiples steps.
+For multi-drone scenarios, `Pathfinder.all_paths()` discovers up to 20
+edge-disjoint paths by iteratively removing edges of previously found routes.
+Drones are distributed round-robin across these paths at spawn time, which
+maximises throughput and helps meet the subject's performance benchmarks.
 
-The simulation in `simulation.py` handles the actual turn loop. It stores each drone
-state, advances drones step by step, supports undoing the previous turn, and produces
-the log format used by the UI. Capacity checks are applied through the GUI objects so
-that zone occupancy and connection traversal remain consistent with the rendered map.
+The simulation in `simulation.py` handles the turn loop with a single-pass
+reservation system. Each turn, candidate moves are collected, shuffled for
+fairness, and atomically reserved (checking both zone and connection capacity
+against current occupancy plus in-turn reservations). This avoids the race
+condition present in simpler two-phase approaches.
 
-## TODO
-This is a playable routing system, not a fully optimized solver. The code is designed
-to be understandable, modular, and easy to extend with more advanced scheduling or
-path allocation logic later.
-## END TODO
+Movement logs are printed to the terminal each turn in the required format
+(``D<id>-<zone>`` space-separated per line) and also returned for GUI use.
 
 ## Visual Representation
 
@@ -151,10 +151,13 @@ This section explains how the functions and classes in the project interact.
 
 ### `algo.py`
 
-- `Pathfinder` is responsible for graph traversal.
+- `Pathfinder` is responsible for graph traversal using Dijkstra's algorithm.
 - `Pathfinder._build_adjacency()` turns the rendered map into a neighbor lookup table.
 - `Pathfinder.get_neighbors()` returns connected hubs for a given hub name.
-- `Pathfinder.shortest_path()` finds a route from start to end.
+- `Pathfinder.shortest_path()` finds the lowest-cost route from start to end,
+  optionally avoiding a set of blocked edges.
+- `Pathfinder.all_paths()` discovers up to 20 edge-disjoint paths for
+  multi-drone distribution.
 - `Pathfinder.movement_cost()` returns the turn cost for entering a destination hub.
 
 ### `simulation.py`
@@ -190,6 +193,6 @@ This section explains how the functions and classes in the project interact.
 
 ### `logic.py`
 
-`logic.py` is currently empty and acts as a placeholder for future shared domain logic.
-If new orchestration helpers are added later, this is the place where they can be
-collected.
+- `ZONE_COST` maps zone type strings to turn costs.
+- `path_cost()` computes the total movement cost for a given path.
+- `format_turn_log()` joins movement entries into the required output format.
