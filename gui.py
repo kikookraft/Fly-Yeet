@@ -948,8 +948,8 @@ class Drone(Rect):
         self.friction = .9
         self.move_power = 0.1
         self.wander_margin: float = .8
-        self.moove_cooldown: float = cooldown
-        self.last_mooved: float = 0
+        self.move_cooldown: float = cooldown
+        self.last_moved: float = 0
         self.scale: float = 3.0
         self.image_path: str = image_path
 
@@ -971,7 +971,7 @@ class Drone(Rect):
 
     def move(self, x: float, y: float) -> None:
         """Move the drone and refresh its cooldown."""
-        self.last_mooved = pygame.time.get_ticks() / 1000
+        self.last_moved = pygame.time.get_ticks() / 1000
         return super().move(x, y)
 
     def handle_collisions(
@@ -1007,11 +1007,11 @@ class Drone(Rect):
 
     def wander(self, window: Window) -> None:
         """Send the drone to a random target."""
-        if not self.alive or self.moove_cooldown < 0:
+        if not self.alive or self.move_cooldown < 0:
             return
         if (
-            pygame.time.get_ticks() / 1000 - self.last_mooved
-            > self.moove_cooldown
+            pygame.time.get_ticks() / 1000 - self.last_moved
+            > self.move_cooldown
         ):
             self.move(
                 random.random() * self.wander_margin * window.width + (
@@ -1517,8 +1517,8 @@ if __name__ == "__main__":
         for drone in drones:
             drone.draw(window)
             if (
-                pygame.time.get_ticks() / 1000 - drone.last_mooved
-                > drone.moove_cooldown + 2
+                pygame.time.get_ticks() / 1000 - drone.last_moved
+                > drone.move_cooldown + 2
             ):
                 drone.wander(window)
         logo.dummy += 0.05

@@ -790,7 +790,6 @@ def _quick_view(map_path: str) -> None:
         "middle-drag = pan  |  SPACE = reset view",
         centered=True,
     )
-    renderer.add(title, layer=LAYER_MENU)
     renderer.add(hint, layer=LAYER_MENU)
 
     fps_text = gui.Text(10, 10, 24, "FPS: 0")
