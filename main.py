@@ -958,6 +958,9 @@ if __name__ == "__main__":
     else:
         try:
             App().run()
+        except KeyboardInterrupt:
+            print("Exiting on user interrupt.", file=sys.stderr)
+            sys.exit(0)
         except Exception as exc:
             print(f"Fatal error: {exc}", file=sys.stderr)
             sys.exit(1)
