@@ -216,6 +216,9 @@ class App:
         def start_challenger() -> None:
             self._build_difficulty_menu("challenger")
 
+        def start_stress() -> None:
+            self._build_stress_menu()
+
         def quit_app() -> None:
             self.running = False
 
@@ -235,7 +238,12 @@ class App:
             "Challenger Levels",
             start_challenger,
         )
-        self.btn_quit = make_button(start_y + spacing * 4, "Quit", quit_app)
+        self.btn_stress = make_button(
+            start_y + spacing * 4,
+            "Stress Levels",
+            start_stress,
+        )
+        self.btn_quit = make_button(start_y + spacing * 5, "Quit", quit_app)
 
         title = gui.Text(
             self.window.width / 2,
@@ -322,6 +330,82 @@ class App:
         back_button.set_hook(go_back)
         self._register_button(back_button)
 
+    def _build_stress_menu(self) -> None:
+        """Show a menu listing every valid map in ``maps/stress/``."""
+        self.state = "menu"
+        self.menu_level = "stress"
+        self.selected_difficulty = "stress"
+        self.selected_map = None
+        self._clear_menu_layers()
+        self._build_background()
+
+        self.window.set_zoom(1.0)
+        self.window.set_offset(0, 0)
+
+        title = gui.Text(
+            self.window.width / 2,
+            120,
+            42,
+            "Stress-Test Maps",
+            centered=True,
+            lock_to_screen=False,
+        )
+        self.renderer.add(title, layer=1)
+
+        # Scan the stress directory for valid map files
+        stress_dir: str = os.path.join("maps", "stress")
+        stress_maps: list[str] = []
+        if os.path.isdir(stress_dir):
+            for fname in sorted(os.listdir(stress_dir)):
+                if fname.startswith("invalid_"):
+                    continue
+                if not fname.endswith(".txt"):
+                    continue
+                stress_maps.append(fname)
+
+        center_x: float = self.window.width / 2
+        start_y: float = 230
+        spacing: float = 54
+
+        def make_stress_button(index: int, fname: str) -> gui.Button:
+            map_path: str = os.path.join(stress_dir, fname)
+            # Strip .txt and make a readable label
+            label: str = fname[:-4].replace("_", " ")
+
+            def select_map() -> None:
+                self.selected_map = map_path
+                self.state = "map"
+                self._enter_map_mode(map_path)
+
+            btn = gui.Button(
+                center_x,
+                start_y + spacing * index,
+                520,
+                44,
+                gui.Text(0, 0, 22, label),
+                radius=6,
+            )
+            btn.set_hook(select_map)
+            return self._register_button(btn)
+
+        for idx, fname in enumerate(stress_maps):
+            make_stress_button(idx, fname)
+
+        def go_back() -> None:
+            self._build_root_menu()
+
+        back_y: float = start_y + spacing * max(len(stress_maps), 1) + 30
+        back_button = gui.Button(
+            center_x,
+            back_y,
+            420,
+            60,
+            gui.Text(0, 0, 28, "Back"),
+            radius=8,
+        )
+        back_button.set_hook(go_back)
+        self._register_button(back_button)
+
     def _enter_map_mode(self, map_path: str) -> None:
         """Parse *map_path* and populate the renderer with the map."""
         # Clear previous map layers and menu artefacts
@@ -389,7 +473,8 @@ class App:
                 lock_to_screen=True,
             )
             self.renderer.add(hint, layer=LAYER_MENU)
-        except (ValueError, FileNotFoundError) as exc:
+        except (ValueError, FileNotFoundError,
+                IsADirectoryError, RuntimeError) as exc:
             _show_error_overlay(self.renderer, self.window, str(exc))
 
     def _center_map_view(self) -> None:
@@ -774,7 +859,8 @@ def _quick_view(map_path: str) -> None:
 
         # Center the view
         _center_view(window, map_gui_obj)
-    except (ValueError, FileNotFoundError) as exc:
+    except (ValueError, FileNotFoundError,
+            IsADirectoryError, TypeError) as exc:
         _show_error_overlay(renderer, window, str(exc))
 
     if map_gui_obj is not None:
@@ -834,9 +920,46 @@ def _quick_view(map_path: str) -> None:
 
 
 if __name__ == "__main__":
+    # --- help / usage ---
+    if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help", "help"):
+        print("Usage: python main.py [map_file.txt]")
+        print()
+        print("  No arguments : launch the interactive menu")
+        print("  map_file.txt : open a map in quick-view mode")
+        print()
+        print("Examples:")
+        print("  python main.py")
+        print("  python main.py maps/easy/01_linear_path.txt")
+        sys.exit(0)
+
+    # --- validate map path ---
     if len(sys.argv) > 1:
-        # Direct test: python main.py <map_file>
-        _quick_view(sys.argv[1])
+        map_path: str = sys.argv[1]
+        if not os.path.isfile(map_path):
+            print(f"Error: file not found: '{map_path}'", file=sys.stderr)
+            print("Usage: python main.py [map_file.txt]", file=sys.stderr)
+            sys.exit(1)
+        if not map_path.endswith(".txt"):
+            print(
+                "Warning: '{path}' does not end with .txt —"
+                " are you sure this is a map file?".format(
+                    path=map_path
+                ),
+                file=sys.stderr,
+            )
+        try:
+            _quick_view(map_path)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
+        except Exception as exc:
+            print(f"Unexpected error: {exc}", file=sys.stderr)
+            sys.exit(1)
     else:
-        App().run()
-        pygame.quit()
+        try:
+            App().run()
+        except Exception as exc:
+            print(f"Fatal error: {exc}", file=sys.stderr)
+            sys.exit(1)
+        finally:
+            pygame.quit()

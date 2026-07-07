@@ -94,13 +94,20 @@ class Simulation:
         if start is None or end_name is None:
             raise RuntimeError("Map missing start or end hub")
 
-        # Compute multiple edge-disjoint paths
+        # Compute diverse paths for multi-drone distribution
         paths: list[list[str]] = self.pathfinder.all_paths(
             start.name, end_name
         )
         if not paths:
             raise RuntimeError(
-                f"No path from {start.name} to {end_name}"
+                f"No path exists from start '{start.name}' "
+                f"to end '{end_name}'. The map may have all routes "
+                f"blocked or the end hub may be unreachable."
+            )
+        if count > 500:
+            print(
+                f"Warning: spawning {count} drones may be slow.",
+                file=sys.stderr,
             )
 
         # Distribute drones round-robin across available paths

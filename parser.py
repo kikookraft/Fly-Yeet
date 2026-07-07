@@ -319,12 +319,49 @@ def parse_map_file(filepath: str) -> Map:
 
     Raises:
         FileNotFoundError: If *filepath* does not exist.
+        IsADirectoryError: If *filepath* is a directory.
         ValueError: If any parsing or validation errors are encountered.
     """
     ec = ParseErrorCollector()
 
-    with open(filepath, "r", encoding="utf-8") as fh:
-        lines = fh.readlines()
+    # --- validate the file path itself ---
+    if not isinstance(filepath, str):
+        raise TypeError(
+            f"filepath must be a string, got {type(filepath).__name__}"
+        )
+    if not filepath:
+        raise ValueError("filepath must not be empty")
+    if os.path.isdir(filepath):
+        raise IsADirectoryError(f"'{filepath}' is a directory, not a file")
+    if not os.path.isfile(filepath):
+        raise FileNotFoundError(f"Map file not found: '{filepath}'")
+
+    try:
+        with open(filepath, "r", encoding="utf-8") as fh:
+            raw_text: str = fh.read()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ValueError(
+            f"Cannot read map file '{filepath}': {exc}"
+        ) from exc
+
+    # --- empty / comment-only file check ---
+    stripped: str = raw_text.strip()
+    if not stripped:
+        raise ValueError(
+            f"Map file '{filepath}' is empty or contains only whitespace"
+        )
+    # Check if every non-blank line is a comment
+    non_comment: list[str] = [
+        ln for ln in stripped.split("\n")
+        if ln.strip() and not ln.strip().startswith("#")
+    ]
+    if not non_comment:
+        raise ValueError(
+            f"Map file '{filepath}' contains only comments — "
+            f"no definitions found"
+        )
+
+    lines: list[str] = raw_text.split("\n")
 
     # ---- accumulators ----
     nb_drones: Optional[int] = None
@@ -348,7 +385,7 @@ def parse_map_file(filepath: str) -> Map:
         r"(\S+)-(\S+)"
         r"(?:\s+\[(.+?)\])?\s*$"
     )
-    nb_re = re.compile(r"^nb_drones:\s+(\d+)\s*$")
+    nb_re = re.compile(r"^nb_drones:\s+(-?\d+)\s*$")
 
     # ---- line-by-line parsing ----
     for i, raw_line in enumerate(lines, start=1):
@@ -367,6 +404,13 @@ def parse_map_file(filepath: str) -> Map:
                 val = int(m.group(1))
                 if val <= 0:
                     ec.add(i, f"nb_drones must be positive, got {val}")
+                    nb_drones = val  # prevent "Missing" message
+                elif val > 1000:
+                    ec.add(
+                        i,
+                        f"nb_drones is unreasonably large ({val}). "
+                        f"Maximum allowed is 1000.",
+                    )
                 else:
                     nb_drones = val
             continue
