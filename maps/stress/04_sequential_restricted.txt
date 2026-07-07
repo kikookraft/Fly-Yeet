@@ -1,0 +1,13 @@
+# Stress 04: Three restricted zones in sequence — 4-turn transit chain
+nb_drones: 3
+
+start_hub: start 0 0 [color=green max_drones=3]
+hub: rest1 1 0 [zone=restricted color=orange]
+hub: rest2 2 0 [zone=restricted color=orange]
+hub: rest3 3 0 [zone=restricted color=orange]
+end_hub: goal 4 0 [color=red]
+
+connection: start-rest1
+connection: rest1-rest2
+connection: rest2-rest3
+connection: rest3-goal

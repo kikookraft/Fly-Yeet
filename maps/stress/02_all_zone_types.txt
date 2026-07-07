@@ -1,0 +1,18 @@
+# Stress 02: All four zone types mixed in one path
+nb_drones: 3
+
+start_hub: start 0 0 [color=green max_drones=3]
+hub: normal_hub 1 0 [color=blue zone=normal]
+hub: priority_hub 2 0 [color=cyan zone=priority max_drones=2]
+hub: restricted_hub 3 0 [color=orange zone=restricted]
+hub: blocked_hub 4 0 [color=red zone=blocked]
+hub: bypass 4 1 [color=yellow zone=priority]
+end_hub: goal 5 0 [color=green]
+
+connection: start-normal_hub
+connection: normal_hub-priority_hub
+connection: priority_hub-restricted_hub
+connection: restricted_hub-goal
+connection: start-blocked_hub
+connection: priority_hub-bypass
+connection: bypass-goal

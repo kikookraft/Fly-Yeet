@@ -1,0 +1,25 @@
+# Stress 09: Multiple parallel paths — tests path distribution
+nb_drones: 20
+
+start_hub: start 0 0 [color=green max_drones=20]
+hub: fork 1 0 [color=blue max_drones=10]
+hub: path_a1 2 0 [color=cyan max_drones=5]
+hub: path_a2 3 0 [color=cyan max_drones=5]
+hub: path_b1 2 1 [color=orange max_drones=5]
+hub: path_b2 3 1 [color=orange max_drones=5]
+hub: path_c1 2 -1 [color=yellow max_drones=5]
+hub: path_c2 3 -1 [color=yellow max_drones=5]
+hub: merge 4 0 [color=blue max_drones=15]
+end_hub: goal 5 0 [color=red max_drones=20]
+
+connection: start-fork [max_link_capacity=10]
+connection: fork-path_a1 [max_link_capacity=5]
+connection: fork-path_b1 [max_link_capacity=5]
+connection: fork-path_c1 [max_link_capacity=5]
+connection: path_a1-path_a2
+connection: path_b1-path_b2
+connection: path_c1-path_c2
+connection: path_a2-merge
+connection: path_b2-merge
+connection: path_c2-merge
+connection: merge-goal [max_link_capacity=15]

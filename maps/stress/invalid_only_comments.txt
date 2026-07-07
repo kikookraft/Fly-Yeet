@@ -1,0 +1,4 @@
+# INVALID: only comments, no actual definitions
+# This is a comment
+# So is this
+# Nothing useful here

@@ -1,0 +1,12 @@
+# Stress 05: 30 drones through a single capacity-1 zone
+# Tests pipeline throughput with extreme contention
+nb_drones: 30
+
+start_hub: start 0 0 [color=green max_drones=30]
+hub: gate 1 0 [color=orange max_drones=1]
+hub: waiting_area 2 0 [color=blue max_drones=5]
+end_hub: goal 3 0 [color=red max_drones=30]
+
+connection: start-gate
+connection: gate-waiting_area
+connection: waiting_area-goal

@@ -1,0 +1,7 @@
+# Stress 01: Minimal map — single drone, direct connection
+nb_drones: 1
+
+start_hub: start 0 0 [color=green]
+end_hub: goal 1 0 [color=red]
+
+connection: start-goal

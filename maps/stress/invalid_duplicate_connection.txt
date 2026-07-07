@@ -1,0 +1,8 @@
+# INVALID: duplicate connection (a-b and b-a are the same)
+nb_drones: 1
+
+start_hub: start 0 0 [color=green]
+end_hub: goal 1 0 [color=red]
+
+connection: start-goal
+connection: goal-start

@@ -459,3 +459,5 @@ display, or adjust a data structure to store new information, etc.
 The details (scope, target, etc.) will be specified in the evaluation guidelines and may
 vary from one evaluation to another for the same project.
 22
+
+Live coding: at each step print number of drone at each hub and connection

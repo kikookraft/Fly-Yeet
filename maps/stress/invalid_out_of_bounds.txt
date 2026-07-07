@@ -1,0 +1,9 @@
+# INVALID: coordinates out of range [-100, 100]
+nb_drones: 1
+
+start_hub: start 0 0 [color=green]
+hub: too_far 200 0 [color=red]
+end_hub: goal 50 0 [color=yellow]
+
+connection: start-too_far
+connection: too_far-goal

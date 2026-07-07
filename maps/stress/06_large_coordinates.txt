@@ -1,0 +1,11 @@
+# Stress 06: Hubs at extreme coordinate boundaries
+nb_drones: 2
+
+start_hub: start -100 -100 [color=green]
+hub: mid 0 50 [color=blue]
+hub: far 50 -50 [color=blue]
+end_hub: goal 100 100 [color=red]
+
+connection: start-mid
+connection: mid-far
+connection: far-goal

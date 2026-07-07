@@ -1,0 +1,13 @@
+# Stress 03: High-capacity zones and connections — 100 drones pipeline
+nb_drones: 50
+
+start_hub: start 0 0 [color=green max_drones=50]
+hub: wide_hub1 1 0 [color=blue max_drones=20]
+hub: wide_hub2 2 0 [color=blue max_drones=20]
+hub: wide_hub3 3 0 [color=blue max_drones=20]
+end_hub: goal 4 0 [color=red max_drones=50]
+
+connection: start-wide_hub1 [max_link_capacity=20]
+connection: wide_hub1-wide_hub2 [max_link_capacity=20]
+connection: wide_hub2-wide_hub3 [max_link_capacity=20]
+connection: wide_hub3-goal [max_link_capacity=20]

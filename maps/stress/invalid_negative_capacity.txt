@@ -1,0 +1,6 @@
+# INVALID: max_drones with negative value
+nb_drones: 2
+
+start_hub: start 0 0 [color=green max_drones=-1]
+end_hub: goal 1 0 [color=red]
+connection: start-goal

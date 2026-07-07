@@ -1,0 +1,13 @@
+# Stress 07: All intermediate hubs are blocked — no valid path exists
+# The algorithm should report unreachable or fail gracefully
+nb_drones: 2
+
+start_hub: start 0 0 [color=green]
+hub: blocked1 1 0 [zone=blocked color=red]
+hub: blocked2 1 1 [zone=blocked color=red]
+end_hub: goal 2 0 [color=yellow]
+
+connection: start-blocked1
+connection: start-blocked2
+connection: blocked1-goal
+connection: blocked2-goal

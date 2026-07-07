@@ -1,0 +1,15 @@
+# Stress 08: Isolated subgraph — some hubs unreachable from start
+# Only the middle path reaches goal; side branches are dead ends
+nb_drones: 5
+
+start_hub: start 0 0 [color=green max_drones=5]
+hub: isolated1 -1 0 [color=purple]
+hub: isolated2 -2 0 [color=purple]
+hub: main_path 1 0 [color=blue]
+hub: dead_end 0 1 [color=red]
+end_hub: goal 2 0 [color=yellow]
+
+connection: start-main_path
+connection: main_path-goal
+connection: isolated1-isolated2
+connection: start-dead_end

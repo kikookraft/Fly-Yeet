@@ -1,0 +1,9 @@
+# INVALID: unknown zone type "magical"
+nb_drones: 1
+
+start_hub: start 0 0 [color=green]
+hub: weird_zone 1 0 [zone=magical color=purple]
+end_hub: goal 2 0 [color=red]
+
+connection: start-weird_zone
+connection: weird_zone-goal
