@@ -216,10 +216,10 @@ class Simulation:
                     movements.append(f"D{sd.drone_id}-{conn_name}")
 
         # ---- Phase 2: single-pass reservation + execution ----
-        # Track removals/additions dynamically (not pre-counted) so
-        # drones that fail to move don't inflate the leaving count.
-        removed: dict[str, int] = {}  # hub_name → drones removed this turn
-        added: dict[str, int] = {}    # hub_name → drones added this turn
+        # `len(target.current_drones)` always reflects the true state
+        # (every successful move calls add_drone / remove_drone).
+        # The only thing NOT yet reflected is future arrivals from
+        # restricted transit — tracked in _transit_incoming.
         reserved_conn: dict[
             tuple[str, str], int
         ] = {}  # (hub_a, hub_b) → drones traversing
@@ -260,13 +260,10 @@ class Simulation:
             move_cost = self.pathfinder.movement_cost(target.name)
 
             # --- check target zone capacity ---
-            # Effective = current occupants − already-removed-this-turn
-            #             + already-added-this-turn
-            #             + drones in transit toward this hub
+            # current_drones already reflects all additions/removals
+            # from earlier drones processed this same turn.
             effective: int = (
                 len(target.current_drones)
-                - removed.get(target.name, 0)
-                + added.get(target.name, 0)
                 + self._transit_incoming.get(target.name, 0)
             )
             if not target.is_start and not target.is_end:
@@ -284,11 +281,7 @@ class Simulation:
                     >= conn.max_link_capacity):
                 continue
 
-            # --- reserve ---
-            added[target.name] = added.get(target.name, 0) + 1
-            removed[sd.current_hub.name] = (
-                removed.get(sd.current_hub.name, 0) + 1
-            )
+            # --- reserve connection slot ---
             reserved_conn[edge] = conn_reserved + 1
 
             # --- execute ---
