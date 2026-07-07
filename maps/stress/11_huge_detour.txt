@@ -1,0 +1,18 @@
+# Stress 11: Simple path is a blocked hub and the only other path is a huge detour
+nb_drones: 5
+
+start_hub: start 0 0 [color=green max_drones=3]
+hub: nono 1 0 [color=red zone=blocked]
+end_hub: goal 2 0 [color=green]
+hub: detour1 0 1 [color=blue zone=restricted]
+hub: detour2 1 2 [color=blue zone=restricted]
+hub: detour3 2 1 [color=blue zone=restricted]
+hub: detour4 3 2 [color=blue zone=restricted]
+
+connection: start-nono
+connection: nono-goal
+connection: start-detour1
+connection: detour1-detour2
+connection: detour2-detour3
+connection: detour3-detour4
+connection: detour4-goal
