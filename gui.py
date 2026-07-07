@@ -1116,8 +1116,7 @@ class Hub_gui(Rect):
             img_path = "assets/warning.png"
         elif self.zone_type == "priority":
             img_path = "assets/plus.png"
-        elif self.zone_type == "blocked" \
-                or (self.color == (255, 0, 0) and self.name != "slow_path2"):
+        elif self.zone_type == "blocked":
             img_path = "assets/cross.png"
         else:
             img_path = "assets/circle.png"

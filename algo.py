@@ -167,7 +167,7 @@ class Pathfinder:
 
         # Unpenalized cost of the true shortest path
         best_cost: float = self._path_unpenalized_cost(first)
-        cost_limit: float = best_cost * 1.3
+        cost_limit: float = best_cost * 1.2
 
         paths: list[list[str]] = [first]
         penalty: dict[tuple[str, str], float] = {}
