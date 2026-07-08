@@ -561,8 +561,16 @@ class App:
                                 )
                         elif event.key == pygame.K_d:
                             if self._map_gui is not None:
+                                print("DEBUG mode toggled:",
+                                      not self._map_gui.debug)
                                 self._map_gui.set_debug(
                                     not self._map_gui.debug)
+                        elif event.key == pygame.K_c:
+                            if self._map_gui is not None:
+                                new_val = not self._map_gui.collide
+                                print("COLLIDE mode toggled:", new_val)
+                                self._map_gui.set_collide(new_val)
+                                self.renderer.collisions_enabled = new_val
                 if event.type == pygame.MOUSEWHEEL:
                     mouse_x, mouse_y = pygame.mouse.get_pos()
                     world_x, world_y = self.window.screen_to_world(

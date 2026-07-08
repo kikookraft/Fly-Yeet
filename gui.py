@@ -952,6 +952,7 @@ class Drone(Rect):
         self.last_moved: float = 0
         self.scale: float = 3.0
         self.image_path: str = image_path
+        self.collide: bool = True
 
         self._last_z_deg: int | None = None
         self._last_zoom: float | None = None
@@ -978,12 +979,12 @@ class Drone(Rect):
             self,
             all_drones: list["Drone"]) -> None:
         """Apply drone collision forces."""
-        if not self.alive:
+        if not self.alive or not self.collide:
             return
         hitbox_radius: float = 70  # Safe distance between drones
 
         for other in all_drones:  # collision with other
-            if other is self or other.alive is False:
+            if other is self or other.alive is False or not other.collide:
                 continue
 
             dx: float = self.x - other.x
@@ -1067,6 +1068,18 @@ class Drone(Rect):
                 (sx, sy),
                 (stx, sty),
             )
+
+    def set_collide(self, collide: bool) -> None:
+        """Set whether the drone collides with other drones."""
+        if type(collide) is not bool:
+            raise TypeError("collide must be a bool")
+        self.collide = collide
+        if not collide:
+            # Stop any residual drift from previous collisions so the
+            # drone can settle at its move target immediately.
+            self.vel_x = 0.0
+            self.vel_y = 0.0
+            self.vel_z = 0.0
 
 
 class Hub_gui(Rect):
@@ -1296,6 +1309,7 @@ class Map_gui:
         self.hubs: dict[str, Hub_gui] = {}
         self.connections: list[Connection_gui] = []
         self.debug: bool = False
+        self.collide: bool = True
 
     def add_hub(self, hub: Hub_gui) -> None:
         """Register a hub GUI object."""
@@ -1336,6 +1350,20 @@ class Map_gui:
         for hub in self.hubs.values():
             hub.set_debug(debug)
 
+    def set_collide(self, collide: bool) -> None:
+        """Set collision mode for all visual drones on the map."""
+        self.collide = collide
+        for hub in self.hubs.values():
+            for sd in hub.current_drones:
+                dg = getattr(sd, "current_drone_gui", None)
+                if isinstance(dg, Drone):
+                    dg.set_collide(collide)
+        for conn in self.connections:
+            for sd in conn.traversing_drones:
+                dg = getattr(sd, "current_drone_gui", None)
+                if isinstance(dg, Drone):
+                    dg.set_collide(collide)
+
 
 class LayeredRenderer:
     """Simple layered renderer/scene manager.
@@ -1349,6 +1377,7 @@ class LayeredRenderer:
 
     def __init__(self) -> None:
         self._layers: dict[int, list[_Drawable]] = {}
+        self.collisions_enabled: bool = True
 
     def add(self, obj: _Drawable, layer: int = 0) -> None:
         """Add an object to a given layer."""
@@ -1410,11 +1439,12 @@ class LayeredRenderer:
                     all_drones.append(obj)
 
         # collisions
-        for d in all_drones:
-            try:
-                d.handle_collisions(all_drones)
-            except Exception:
-                pass
+        if self.collisions_enabled:
+            for d in all_drones:
+                try:
+                    d.handle_collisions(all_drones)
+                except Exception:
+                    pass
 
         # wandering
         for d in all_drones:
