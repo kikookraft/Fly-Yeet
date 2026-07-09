@@ -273,6 +273,10 @@ def _parse_metadata_block(raw: str) -> tuple[dict[str, str], list[str]]:
     """
     result: dict[str, str] = {}
     duplicate_keys: list[str] = []
+    # Metadata content is already extracted from the outer [ ... ] by regex.
+    # Any bracket that remains here means malformed syntax (e.g. []color=...]).
+    if "[" in raw or "]" in raw:
+        raise ValueError(f"Invalid metadata block: '{raw}'")
     inner = raw.strip().strip("[]").strip()
     if not inner:
         return result, duplicate_keys
@@ -440,7 +444,11 @@ def parse_map_file(filepath: str) -> Map:
             raw_meta: str = m.group(5) or ""
             meta: dict[str, str]
             duplicate_meta_keys: list[str]
-            meta, duplicate_meta_keys = _parse_metadata_block(raw_meta)
+            try:
+                meta, duplicate_meta_keys = _parse_metadata_block(raw_meta)
+            except ValueError as exc:
+                ec.add(i, str(exc))
+                continue
             for meta_key in sorted(set(duplicate_meta_keys)):
                 ec.add(
                     i,
@@ -539,9 +547,13 @@ def parse_map_file(filepath: str) -> Map:
             raw_meta_conn: str = m.group(3) or ""
             meta_conn: dict[str, str]
             duplicate_conn_keys: list[str]
-            meta_conn, duplicate_conn_keys = _parse_metadata_block(
-                raw_meta_conn
-            )
+            try:
+                meta_conn, duplicate_conn_keys = _parse_metadata_block(
+                    raw_meta_conn
+                )
+            except ValueError as exc:
+                ec.add(i, str(exc))
+                continue
             for conn_key in sorted(set(duplicate_conn_keys)):
                 ec.add(
                     i,
