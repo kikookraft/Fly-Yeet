@@ -785,13 +785,13 @@ def _show_error_overlay(
     content_top: int = cy - box_h // 2 + pad
 
     # Dark semi-transparent backdrop
-    backdrop = gui.Rect(
-        cx, cy, box_w, box_h,
-        color=(20, 20, 30),
-        alpha=210,
-        radius=12,
-    )
-    renderer.add(backdrop, layer=LAYER_MENU)
+    # backdrop = gui.Rect(
+    #     cx, cy, box_w, box_h,
+    #     color=(20, 20, 30),
+    #     alpha=210,
+    #     radius=12,
+    # )
+    # renderer.add(backdrop, layer=LAYER_MENU)
 
     # Title
     title_err = gui.Text(
