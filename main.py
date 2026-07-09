@@ -881,7 +881,8 @@ def _quick_view(map_path: str) -> None:
     hint = gui.Text(
         window.width // 2, window.height - 50, 24,
         "ESC / Q = quit  |  scroll = zoom  |  " +
-        "middle-drag = pan  |  SPACE = reset view",
+        "middle-drag = pan  |  SPACE = reset view | " +
+        "C = collisions on / off",
         centered=True,
     )
     renderer.add(hint, layer=LAYER_MENU)
