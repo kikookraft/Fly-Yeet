@@ -468,7 +468,8 @@ class App:
                 self.window.width // 2,
                 self.window.height - 50,
                 22,
-                "RIGHT |  LEFT  |  A=auto  |  D=debug  |  SPACE=center",
+                "RIGHT |  LEFT  |  A=auto  |  D=debug  |  SPACE=center | " +
+                "C = collisions on / off",
                 centered=True,
                 lock_to_screen=True,
             )
