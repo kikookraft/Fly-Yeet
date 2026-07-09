@@ -10,6 +10,8 @@ import sys
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
+import pygame
+
 import gui
 
 if TYPE_CHECKING:
@@ -205,7 +207,7 @@ class Simulation:
                         if dest.is_end:
                             sd.arrived = True
                             sd.arrival_tick = (
-                                gui.pygame.time.get_ticks() / 1000.0
+                                pygame.time.get_ticks() / 1000.0
                             )
                 else:
                     # Still in transit
@@ -308,7 +310,7 @@ class Simulation:
                 if target.is_end:
                     sd.arrived = True
                     sd.arrival_tick = (
-                        gui.pygame.time.get_ticks() / 1000.0
+                        pygame.time.get_ticks() / 1000.0
                     )
 
         self._log_history.append(movements)

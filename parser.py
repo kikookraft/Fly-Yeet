@@ -266,32 +266,32 @@ class ParseErrorCollector:
 # Internal helpers
 # =============================================================================
 
-def _parse_metadata_block(raw: str) -> dict[str, str]:
-    """Turn ``[key=val key2=val2]`` into a dict."""
+def _parse_metadata_block(raw: str) -> tuple[dict[str, str], list[str]]:
+    """Turn ``[key=val key2=val2]`` into a dict.
+
+    Returns metadata and duplicate keys encountered in the same block.
+    """
     result: dict[str, str] = {}
+    duplicate_keys: list[str] = []
     inner = raw.strip().strip("[]").strip()
     if not inner:
-        return result
+        return result, duplicate_keys
     for token in inner.split():
         if "=" in token:
             key, _, val = token.partition("=")
+            if key in result:
+                duplicate_keys.append(key)
             result[key] = val
-    return result
+    return result, duplicate_keys
 
 
-def _make_color(
-    color_name: str,
-    ec: ParseErrorCollector,
-    line_num: int,
-) -> Color:
+def _make_color(color_name: str) -> Color:
     """Build a :class:`Color` from a name; records errors on failure.
 
-    Returns a fallback gray ``Color`` when the name is unknown so parsing
-    can continue collecting further errors.
+    Returns a fallback gray ``Color`` when the name is unknown.
     """
     rgb = COLOR_RGB.get(color_name)
     if rgb is None:
-        ec.add(line_num, f"Unknown color: '{color_name}'")
         return Color(name="gray", r=128, g=128, b=128)
     return Color(name=color_name, r=rgb[0], g=rgb[1], b=rgb[2])
 
@@ -387,6 +387,21 @@ def parse_map_file(filepath: str) -> Map:
     )
     nb_re = re.compile(r"^nb_drones:\s+(-?\d+)\s*$")
 
+    # The first effective config line must define the drone count.
+    first_non_comment_line_num: int = 0
+    first_non_comment_line: str = ""
+    for i, raw_line in enumerate(lines, start=1):
+        stripped_line = raw_line.strip()
+        if stripped_line and not stripped_line.startswith("#"):
+            first_non_comment_line_num = i
+            first_non_comment_line = stripped_line
+            break
+    if first_non_comment_line and not nb_re.match(first_non_comment_line):
+        ec.add(
+            first_non_comment_line_num,
+            "First non-comment line must be nb_drones: <positive integer>",
+        )
+
     # ---- line-by-line parsing ----
     for i, raw_line in enumerate(lines, start=1):
         line = raw_line.strip()
@@ -423,7 +438,15 @@ def parse_map_file(filepath: str) -> Map:
             x: int = int(m.group(3))
             y: int = int(m.group(4))
             raw_meta: str = m.group(5) or ""
-            meta: dict[str, str] = _parse_metadata_block(raw_meta)
+            meta: dict[str, str]
+            duplicate_meta_keys: list[str]
+            meta, duplicate_meta_keys = _parse_metadata_block(raw_meta)
+            for meta_key in sorted(set(duplicate_meta_keys)):
+                ec.add(
+                    i,
+                    f"Duplicate metadata attribute '{meta_key}' "
+                    f"for hub '{name}'",
+                )
 
             # --- name validation ---
             if "-" in name or " " in name:
@@ -454,7 +477,7 @@ def parse_map_file(filepath: str) -> Map:
             color_str: str = meta.get("color", "")
             color: Color
             if color_str:
-                color = _make_color(color_str, ec, i)
+                color = _make_color(color_str)
             else:
                 color = _default_color()
 
@@ -514,7 +537,17 @@ def parse_map_file(filepath: str) -> Map:
             from_name: str = m.group(1)
             to_name: str = m.group(2)
             raw_meta_conn: str = m.group(3) or ""
-            meta_conn: dict[str, str] = _parse_metadata_block(raw_meta_conn)
+            meta_conn: dict[str, str]
+            duplicate_conn_keys: list[str]
+            meta_conn, duplicate_conn_keys = _parse_metadata_block(
+                raw_meta_conn
+            )
+            for conn_key in sorted(set(duplicate_conn_keys)):
+                ec.add(
+                    i,
+                    f"Duplicate metadata attribute '{conn_key}' "
+                    f"for connection '{from_name}-{to_name}'",
+                )
 
             max_lc: int = 1
             if "max_link_capacity" in meta_conn:
