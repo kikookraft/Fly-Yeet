@@ -324,6 +324,16 @@ class Simulation:
 
         return movements
 
+    def _print_debug_counts(self) -> None:
+        """Print the number of drones occupying each hub and connection.
+        """
+        for name, hub in self.map_gui.hubs.items():
+            print("HUB: ", name, len(hub.current_drones))
+
+        for conn in self.map_gui.connections:
+            print("CONN: ", conn.hub_a.name, conn.hub_b.name,
+                  len(conn.traversing_drones))
+
     # ------------------------------------------------------------------
     # Undo
     # ------------------------------------------------------------------

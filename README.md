@@ -42,7 +42,7 @@ Launch the application with the menu:
 make run
 ```
 
-Open a specific map directly:
+Visualize a map directly without the menu:
 
 ```bash
 uv run python main.py maps/easy/01_linear_path.txt
@@ -190,9 +190,3 @@ This section explains how the functions and classes in the project interact.
 4. `simulation.Simulation` spawns drones and advances them turn by turn.
 5. `gui.LayeredRenderer` draws the background, map, drones, and HUD.
 6. The `App` event loop wires user input to the simulation, camera, and menu.
-
-### `logic.py`
-
-- `ZONE_COST` maps zone type strings to turn costs.
-- `path_cost()` computes the total movement cost for a given path.
-- `format_turn_log()` joins movement entries into the required output format.
