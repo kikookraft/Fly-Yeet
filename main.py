@@ -773,8 +773,7 @@ def _show_error_overlay(
     title_height: int = 36
     pad: int = 24
 
-    # Box dimensions
-    box_w: int = max(600, min(1200, window.width - 200))
+    # Box dimensions (box_w kept for future backdrop rendering)
     box_h: int = title_height + len(error_lines) * line_height + pad * 2
 
     # Box centre fixed at screen centre
